@@ -66,6 +66,10 @@ class Plasticity1D:
                 # Corrige a tensao e incrementa a parcela inelastica da deformacao
                 self.Ec = self.Et
                 r = self.S / abs(self.S)
+                r2 = (self.S - self.beta) / abs(self.S - self.beta)
+                C0 = (1+self.H/self.E)
+                self.S = (C0*r*self.S - self.Sy - r2*self.beta) / (C0*r - r2)
+                f = abs(self.S - self.beta) - self.Sy
                 l = f / (self.E + self.H)
                 self.e = self.e + l * r
                 self.e_in = self.e_in + l * r
@@ -187,50 +191,49 @@ class Element:
         self.Kel[3][2] = self.Kel[2][3]
         ###print(self.Kel)
 
-A0 = 1
-E0 = 1.0e6
-m0 = 0
-A = 1.0e-3
-E = 2.08e11
-m = 0
-Et = 2.08e9
-Sy = 2.0e9
-mat0 = Material(E0,A0,m0)
-mat1 = Material(Plasticity1D(E,Et,Sy),A,m)
-mat2 = Material(E,A,m)
-L = 5
-B = L * np.cos(np.pi/12)
-H = L * np.sin(np.pi/12)
-node1 = Node(0, 0, 0)
-node2 = Node(1, L, 0)
-node3 = Node(2, L*(1+np.cos(np.pi/12)), L*np.sin(np.pi/12))
-node4 = Node(3, L*(1+np.cos(np.pi/12)), 1+L*np.sin(np.pi/12))
-nodes = [node1,node2,node3,node4]
-el1 = Element(mat2,node1,node2)
-el2 = Element(mat1,node2,node3)
-#el2 = Element(mat2,node2,node3)
-el3 = Element(mat0,node3,node4)
-els = [el1,el2,el3]
-elimDOFs = [0,1,3,4,6,7]
-
+###A0 = 1
+###E0 = 1.0e6
+###m0 = 0
 ###A = 1.0e-3
 ###E = 2.08e11
 ###m = 0
 ###Et = 2.08e9
 ###Sy = 2.0e9
-###mat1 = Material(E,A,m)
+###mat0 = Material(E0,A0,m0)
 ###mat1 = Material(Plasticity1D(E,Et,Sy),A,m)
+###mat2 = Material(E,A,m)
 ###L = 5
 ###B = L * np.cos(np.pi/12)
 ###H = L * np.sin(np.pi/12)
-###node1 = Node(0,   0, 0)
-###node2 = Node(1,   L, 0)
-###node3 = Node(2, 2*L, 0)
-###nodes = [node1,node2,node3]
+###node1 = Node(0, 0, 0)
+###node2 = Node(1, L, 0)
+###node3 = Node(2, L*(1+np.cos(np.pi/12)), L*np.sin(np.pi/12))
+###node4 = Node(3, L*(1+np.cos(np.pi/12)), 1+L*np.sin(np.pi/12))
+###nodes = [node1,node2,node3,node4]
 ###el1 = Element(mat2,node1,node2)
 ###el2 = Element(mat1,node2,node3)
-###els = [el1,el2]
-###elimDOFs = [0,1,3,5]
+####el2 = Element(mat2,node2,node3)
+###el3 = Element(mat0,node3,node4)
+###els = [el1,el2,el3]
+###elimDOFs = [0,1,3,4,6,7]
+
+A = 1.0e-3
+E1 = 2.08e11
+m = 0
+E2 = 2.08e9
+##Sy = 2.0e9
+Sy = 1.98e9
+mat1 = Material(E1,A,m)
+mat2 = Material(Plasticity1D(E1,E2,Sy),A,m)
+L = 1
+node1 = Node(0,   0, 0)
+node2 = Node(1,   L, 0)
+node3 = Node(2, 2*L, 0)
+nodes = [node1,node2,node3]
+el1 = Element(mat1,node1,node2)
+el2 = Element(mat2,node2,node3)
+els = [el1,el2]
+elimDOFs = [0,1,3,5]
 
 F = [0,4.0e6]
 
@@ -356,11 +359,20 @@ def progress_bar(i,N):
     sys.stdout.write('[%s] %s%s (%s/%s) Elapsed time: %ss\r' % (bar,percents,'%',i,N,t))
     sys.stdout.flush()
 
+def dprint(*args):
+    print(*args)
+
+DEBUG = False
+if DEBUG:
+    nsteps = 610
+    progress_bar = lambda *args: None
+else:
+    dprint = lambda *args: None
+
 step = 0
 iters = []
-STBK = False
+STBK = True
 while step < nsteps:
-###while step < 1:
 
     step = step + 1
     
@@ -387,67 +399,86 @@ while step < nsteps:
         FE = Fext + FI
         
         dR = FE - R
-        #if niter == 1:
-        #    print()
-        #    print("### STEP {} ###".format(step))
-        #print()
-        #print("ITER {}".format(niter))
-        #print()
-        #print("- Forca efetiva")
-        #print(dR)
-        #print()
+        if niter == 1:
+            dprint()
+            dprint("### STEP {} ###".format(step))
+        dprint()
+        dprint("ITER {}".format(niter))
+        dprint()
+        dprint("- Forca efetiva")
+        dprint(dR,FE,R)
+        dprint()
         
         for i,el in enumerate(els):
             el.update_Kloc()
             E = el.material.E
             if isinstance(E, Plasticity1D) and STBK:
             
-                print("----- STEPBACK")
+                dprint("----- STEPBACK")
                 
                 if niter == 1:
                     el.e_i = E.e
                     el.S_i = E.S
-                    print("DEF. INICIAL = {}".format(E.e))
-                    print("TENSAO INICIAL = {}".format(E.S))
-                    print("FORCA INICIAL = {}".format(E.S*el.material.A))
+                    dprint("DEF. INICIAL = {}".format(E.e))
+                    dprint("TENSAO INICIAL = {}".format(E.S))
+                    dprint("FORCA INICIAL = {}".format(E.S*el.material.A))
                     
                 inode1x = 2*el.node1.i
                 inode1y = 2*el.node1.i+1
-                Floc1x = dR[nodeMap[inode1x]] if isinstance(nodeMap[inode1x],int) else 0
-                Floc1y = dR[nodeMap[inode1y]] if isinstance(nodeMap[inode1y],int) else 0
+                Floc1x = FE[nodeMap[inode1x]] if isinstance(nodeMap[inode1x],int) else 0
+                Floc1y = FE[nodeMap[inode1y]] if isinstance(nodeMap[inode1y],int) else 0
                 Floc1 = Floc1x*el.cos + Floc1y*el.sen
                 inode2x = 2*el.node2.i
                 inode2y = 2*el.node2.i+1
-                Floc2x = dR[nodeMap[inode2x]] if isinstance(nodeMap[inode2x],int) else 0
-                Floc2y = dR[nodeMap[inode2y]] if isinstance(nodeMap[inode2y],int) else 0
+                Floc2x = FE[nodeMap[inode2x]] if isinstance(nodeMap[inode2x],int) else 0
+                Floc2y = FE[nodeMap[inode2y]] if isinstance(nodeMap[inode2y],int) else 0
                 Floc2 = Floc2x*el.cos + Floc2y*el.sen
-                Floc = Floc1 - Floc2
+                Floc = Floc2 - Floc1
                 
-                print("Forcas locais no 1")
-                print(Floc1x,Floc1y,Floc1)
-                print("Forcas locais no 2")
-                print(Floc2x,Floc2y,Floc2)
-                print("Forca local total")
-                print(Floc)
+                dprint("Forcas locais no 1")
+                dprint(Floc1x,Floc1y,Floc1)
+                dprint("Forcas locais no 2")
+                dprint(Floc2x,Floc2y,Floc2)
+                dprint("Forca local total")
+                dprint(Floc)
                 
                 S_f = Floc/el.material.A
                 e_i = el.e_i
                 S_i = el.S_i
+                
+                ##if DEBUG:
+                ##    e_f = S_f/E1
+                ##    if S_f > Sy:
+                ##        e_f = Sy/E1 + (S_f-Sy)/E2
+                ##else:
+                ##    E.backup()
+                ##    E.update(S = S_f)
+                ##    e_f = E.e
+                ##    E.restore()
                 E.backup()
                 E.update(S = S_f)
                 e_f = E.e
                 E.restore()
+                
                 de = e_f - e_i
                 dS = S_f - S_i
                 Esec = abs(dS/de)
+                Esec = np.where(np.isnan(Esec),0,Esec)
                 
-                print("NOVA TENSAO = {}".format(S_f))
-                print("NOVA DEF. = {}".format(e_f))
-                print(dS,de,Esec)
+                dprint("NOVA TENSAO = {}".format(S_f))
+                dprint("NOVA DEF. = {}".format(e_f))
+                dprint(dS,de,Esec)
                 
-                Ksec = Esec*el.material.A/el2.l0
+                Ksec = Esec*el.material.A/el.l0
                 el.Ksec = Ksec[0]
-                el.Kloc = el.Ksec
+                dprint(el.Ksec,el.Kloc)
+                el.Kloc = np.where(el.Ksec == 0,el.Kloc,el.Ksec)
+                dprint(el.Ksec,el.Kloc)
+                
+                if niter == 1:
+                    ##LL = np.append(LL,(el2.length-el2.l0)/el2.l0)
+                    ee = np.append(ee,E.e)
+                    SS = np.append(SS,E.S)
         
         # atualiza K
         K = np.zeros((dimK,dimK))
@@ -465,14 +496,14 @@ while step < nsteps:
         dU = np.matmul(KEinv,dR)
         U[step] = U[step] + dU
         
-        #print()
-        #print("----- NEWTON RAPHSON")
-        #print("Matriz de rigidez")
-        #print(KE)
-        #print("Inversa")
-        #print(KEinv)
-        #print("Deslocamentos")
-        #print(dU)
+        #dprint()
+        #dprint("----- NEWTON RAPHSON")
+        #dprint("Matriz de rigidez")
+        #dprint(KE)
+        #dprint("Inversa")
+        #dprint(KEinv)
+        #dprint("Deslocamentos")
+        #dprint(dU)
         
         # atualiza nos a partir de U
         for node in nodes:
@@ -483,10 +514,10 @@ while step < nsteps:
             if DOFy != None:
                 node.y = node.y0 + U[step][DOFy][0]
         
-        ##print("- Coordenadas dos nos:")
+        ##dprint("- Coordenadas dos nos:")
         ##for inode, node in enumerate(nodes):
-        ##    print("No {0}: ({1:g}; {2:g})".format(inode,node.x,node.y))
-        ##print()
+        ##    dprint("No {0}: ({1:g}; {2:g})".format(inode,node.x,node.y))
+        ##dprint()
         
         # atualiza R
         R = np.zeros((dimK,1))
@@ -499,8 +530,8 @@ while step < nsteps:
         # reavalia residuo
         dR = FE - R
         Rnorm = np.linalg.norm(dR)
-        #print("- Norma do residuo: {:g}".format(Rnorm))
-        #print()
+        #dprint("- Norma do residuo: {:g}".format(Rnorm))
+        #dprint()
     
     # Atualiza aceleracoes e velocidades
     A[step] = ic[0] * (U[step] - U[ia]) - ic[2] * V[ia] - ic[3] * A[ia]
@@ -510,40 +541,66 @@ while step < nsteps:
     ##ee = np.append(ee,el2.material.E.e)
     ##SS = np.append(SS,el2.material.E.S)
     
-    ###LL = np.append(LL,(el1.length-el1.l0)/el1.l0)
-    ###ee = np.append(ee,el1.material.E.e)
-    ###SS = np.append(SS,el1.material.E.S)
+    ##LL = np.append(LL,(el1.length-el1.l0)/el1.l0)
+    ##ee = np.append(ee,el1.material.E.e)
+    ##SS = np.append(SS,el1.material.E.S)
     
     iters.append(niter)
     progress_bar(step,nsteps)
 
-data = np.transpose(U)
-t = np.linspace(0, nsteps*Dt, nsteps+1)
+E = lambda i: (SS[i+1]-SS[i])/(ee[i+1]-ee[i])
 
 import matplotlib.pyplot as plt
 
-N = int(1.0*nsteps)
-
 fig = plt.figure(figsize=(10,5))
-plt.subplot(311)
-plt.plot(t,FF[1],'-')
-plt.xlabel("t")
-plt.ylabel("F")
-plt.subplot(312)
-plt.plot(t,data[0][0],'-')
-plt.xlabel("t")
-plt.ylabel("x(2)")
-plt.subplot(313)
-plt.plot(t,data[0][1],'-')
-plt.xlabel("t")
-plt.ylabel("x(1)")
-##plt.subplot(514)
-##plt.plot(t[:N],ee[:N],'-')
-##plt.xlabel("t")
-##plt.ylabel("e")
-##plt.subplot(515)
-##plt.plot(ee[:N],LL[:N],'-')
-##plt.xlabel("e")
-##plt.ylabel("S")
+plt.plot(ee,SS,'-o')
+
+Eaux = Plasticity1D(E1,E2,Sy)
+e_ana = np.hstack([
+    np.linspace(0,ee.max(),10000),
+    np.linspace(ee.max(),ee.min(),10000),
+    np.linspace(ee.min(),0,10000),
+])
+#e_ana = np.insert(e_ana,len(e_ana)-sum(e_ana>ecrit),ecrit)
+#S_ana = np.array([S_x_e(e) for e in e_ana])
+S_ana = np.array([])
+for e in e_ana:
+    Eaux.update(e = e)
+    S_ana = np.append(S_ana, Eaux.S)
+plt.plot(e_ana,S_ana,'-')
+
+plt.xlabel("e")
+plt.ylabel("S")
 plt.show()
-print()
+
+if DEBUG == False:
+
+    data = np.transpose(U)
+    t = np.linspace(0, nsteps*Dt, nsteps+1)
+    
+    #N = int(1.0*nsteps)
+    N = int(1.0*nsteps-510)
+    
+    fig = plt.figure(figsize=(10,5))
+    plt.subplot(311)
+    plt.plot(t[:N],FF[1][:N],'-')
+    plt.xlabel("t")
+    plt.ylabel("F")
+    plt.subplot(312)
+    plt.plot(t[:N],data[0][0][:N],'-')
+    plt.xlabel("t")
+    plt.ylabel("x(1)")
+    plt.subplot(313)
+    plt.plot(t[:N],data[0][1][:N],'-')
+    plt.xlabel("t")
+    plt.ylabel("x(2)")
+    ##plt.subplot(514)
+    ##plt.plot(t[:N],ee[:N],'-')
+    ##plt.xlabel("t")
+    ##plt.ylabel("e")
+    ##plt.subplot(515)
+    ##plt.plot(ee[:N],LL[:N],'-')
+    ##plt.xlabel("e")
+    ##plt.ylabel("S")
+    plt.show()
+    print()
