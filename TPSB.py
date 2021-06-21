@@ -1,241 +1,9 @@
 import numpy as np
 
-class Plasticity1D:
-  
-    def __init__(self, E, Et, Sy):
-    
-        #Dados do material
-        self.E = E    # Modulo de elasticidade
-        self.Et = Et  # Modulo de elasticidade tangente
-        self.Sy = Sy  # Tensao de escoamento
-        self.H = E * Et / (E - Et) # Modulo de encruamento
-    
-        #Variaveis de estado
-        self.e_in = 0  # Parcela inelastica das deformacoes
-        self.beta = 0  # Variavel de controle da plasticidade
-        self.Ec = E    # Modulo de elasticidade atual
-        self.S = 0     # Tensao atual
-        self.e = 0     # Deformacao atual
-        
-        self.e_in_bak = 0
-        self.beta_bak = 0
-        self.Ec_bak = E
-        self.S_bak = 0
-        self.e_bak = 0
-
-    def backup(self):
-        self.e_in_bak = self.e_in
-        self.beta_bak = self.beta
-        self.Ec_bak = self.Ec
-        self.S_bak = self.S
-        self.e_bak = self.e
-    def restore(self):
-        self.e_in = self.e_in_bak
-        self.beta = self.beta_bak
-        self.Ec = self.Ec_bak
-        self.S = self.S_bak
-        self.e = self.e_bak
-
-    # Atualiza o estado de tensao
-    def update(self, **kwargs):
-        if 'e' in kwargs:
-            # Calcula como se fosse regime elastico
-            self.e = kwargs.get('e')
-            e_e = self.e - self.e_in
-            self.S = self.E * e_e
-            self.Ec = self.E
-            # Verifica e faz a correcao plastica
-            f = abs(self.S - self.beta) - self.Sy
-            if f > 0:
-                # Corrige a tensao e incrementa a parcela inelastica da deformacao
-                self.Ec = self.Et
-                r = self.S / abs(self.S)
-                l = f / (self.E + self.H)
-                self.S = self.S - self.E * l * r
-                self.e_in = self.e_in + l * r
-                self.beta = self.beta + l * self.H * r
-        elif 'S' in kwargs:
-            # Calcula como se fosse regime elastico
-            self.S = kwargs.get('S')
-            e_e = self.S / self.E
-            self.e = e_e + self.e_in
-            self.Ec = self.E
-            # Verifica e faz a correcao plastica
-            f = abs(self.S - self.beta) - self.Sy
-            if f > 0:
-                # Corrige a tensao e incrementa a parcela inelastica da deformacao
-                self.Ec = self.Et
-                r = self.S / abs(self.S)
-                r2 = (self.S - self.beta) / abs(self.S - self.beta)
-                C0 = (1+self.H/self.E)
-                self.S = (C0*r*self.S - self.Sy - r2*self.beta) / (C0*r - r2)
-                f = abs(self.S - self.beta) - self.Sy
-                l = f / (self.E + self.H)
-                self.e = self.e + l * r
-                self.e_in = self.e_in + l * r
-                self.beta = self.beta + l * self.H * r
-        else:
-            raise KeyError("Invalid key to function Plasticity1D.update()")
-
-class Node:
-    def __init__(self,i,x,y):
-        self.i = i
-        self.x = x
-        self.y = y
-        self.x0 = x
-        self.y0 = y
-
-class Material:
-    def __init__(self,E,A,M):
-        self.E = E
-        self.A = A
-        self.M = M
-
-class Element:
-    Rel = np.ones((4,1))
-    Kel = np.ones((4,4))
-    Mel = np.diag((1,1,1,1))
-    def __init__(self,material,node1,node2):
-        self.material = material
-        self.node1 = node1
-        self.node2 = node2
-        dx = node2.x - node1.x
-        dy = node2.y - node1.y
-        self.l0 = np.sqrt(dx*dx+dy*dy)
-        self.Mel = self.Mel*self.material.M*self.material.A*self.l0/2
-    def update_Rloc(self):
-        dx = self.node2.x - self.node1.x
-        dy = self.node2.y - self.node1.y
-        length = np.sqrt(dx*dx+dy*dy)
-        self.cos = dx/length
-        self.sen = dy/length
-        self.length = length
-        
-        # Forcas internas
-        e = (length-self.l0)/self.l0
-        if isinstance(self.material.E, Plasticity1D):
-            self.material.E.update(e = e)
-            S = self.material.E.S
-        else:
-            S = self.material.E*e
-        self.Rloc = S*self.material.A
-    def update_Rel(self):
-        self.update_Rloc()
-        sen = self.sen
-        cos = self.cos
-        self.Rel[0][0] = -cos
-        self.Rel[1][0] = -sen
-        self.Rel[2][0] = cos
-        self.Rel[3][0] = sen
-        self.Rel = self.Rel*self.Rloc
-    def update_Kloc(self):
-        dx = self.node2.x - self.node1.x
-        dy = self.node2.y - self.node1.y
-        length = np.sqrt(dx*dx+dy*dy)
-        self.cos = dx/length
-        self.sen = dy/length
-        self.length = length
-        
-        e = (length-self.l0)/self.l0
-        if isinstance(self.material.E, Plasticity1D):
-            self.material.E.update(e = e)
-            S = self.material.E.S
-            E = self.material.E.Ec
-            #E = self.material.E.E
-        else:
-            E = self.material.E
-            S = self.material.E*e
-        self.Kloc = E*self.material.A/self.l0
-        self.Cnl = S*self.material.A/self.length
-        
-    def update_Kel(self):
-        ##self.update_Kloc()
-        
-        # Parcela Linear
-        sen = self.sen
-        cos = self.cos
-        self.Kel[0][0] = cos*cos
-        self.Kel[0][1] = cos*sen
-        self.Kel[0][2] = -cos*cos
-        self.Kel[0][3] = -cos*sen
-        self.Kel[1][1] = sen*sen
-        self.Kel[1][2] = -cos*sen
-        self.Kel[1][3] = -sen*sen
-        self.Kel[2][2] = cos*cos
-        self.Kel[2][3] = cos*sen
-        self.Kel[3][3] = sen*sen
-        ##self.Kel = self.Kel*1.0
-        self.Kel = self.Kel*self.Kloc
-        ###print(self.Kel)
-        
-        # Parcela NaoLinear
-        Cnl = self.Cnl
-        self.Kel[0][0] = self.Kel[0][0] + Cnl*sen*sen
-        self.Kel[0][1] = self.Kel[0][1] - Cnl*cos*sen
-        self.Kel[0][2] = self.Kel[0][2] - Cnl*sen*sen
-        self.Kel[0][3] = self.Kel[0][3] + Cnl*cos*sen
-        self.Kel[1][1] = self.Kel[1][1] + Cnl*cos*cos
-        self.Kel[1][2] = self.Kel[1][2] + Cnl*cos*sen
-        self.Kel[1][3] = self.Kel[1][3] - Cnl*cos*cos
-        self.Kel[2][2] = self.Kel[2][2] + Cnl*sen*sen
-        self.Kel[2][3] = self.Kel[2][3] - Cnl*cos*sen
-        self.Kel[3][3] = self.Kel[3][3] + Cnl*cos*cos
-        #print(self.Kel)
-        
-        # Simetria
-        self.Kel[1][0] = self.Kel[0][1]
-        self.Kel[2][0] = self.Kel[0][2]
-        self.Kel[2][1] = self.Kel[1][2]
-        self.Kel[3][0] = self.Kel[0][3]
-        self.Kel[3][1] = self.Kel[1][3]
-        self.Kel[3][2] = self.Kel[2][3]
-        ###print(self.Kel)
-
-###A0 = 1
-###E0 = 1.0e6
-###m0 = 0
-###A = 1.0e-3
-###E = 2.08e11
-###m = 0
-###Et = 2.08e9
-###Sy = 2.0e9
-###mat0 = Material(E0,A0,m0)
-###mat1 = Material(Plasticity1D(E,Et,Sy),A,m)
-###mat2 = Material(E,A,m)
-###L = 5
-###B = L * np.cos(np.pi/12)
-###H = L * np.sin(np.pi/12)
-###node1 = Node(0, 0, 0)
-###node2 = Node(1, L, 0)
-###node3 = Node(2, L*(1+np.cos(np.pi/12)), L*np.sin(np.pi/12))
-###node4 = Node(3, L*(1+np.cos(np.pi/12)), 1+L*np.sin(np.pi/12))
-###nodes = [node1,node2,node3,node4]
-###el1 = Element(mat2,node1,node2)
-###el2 = Element(mat1,node2,node3)
-####el2 = Element(mat2,node2,node3)
-###el3 = Element(mat0,node3,node4)
-###els = [el1,el2,el3]
-###elimDOFs = [0,1,3,4,6,7]
-
-A = 1.0e-3
-E1 = 2.08e11
-m = 0
-E2 = 2.08e9
-##Sy = 2.0e9
-Sy = 1.98e9
-mat1 = Material(E1,A,m)
-mat2 = Material(Plasticity1D(E1,E2,Sy),A,m)
-L = 1
-node1 = Node(0,   0, 0)
-node2 = Node(1,   L, 0)
-node3 = Node(2, 2*L, 0)
-nodes = [node1,node2,node3]
-el1 = Element(mat1,node1,node2)
-el2 = Element(mat2,node2,node3)
-els = [el1,el2]
-elimDOFs = [0,1,3,5]
-
-F = [0,4.0e6]
+try:
+    exec(open(fname).read())
+except:
+    exec(open('in1.py').read())
 
 nnodes = len(nodes)
 dimK = nnodes*2 # caso bidimensional
@@ -302,13 +70,6 @@ for DOF in elimDOFs:
     M = np.delete(M, DOF, 0)
     M = np.delete(M, DOF, 1)
 
-##print("- Coordenadas iniciais dos nos:")
-##for inode, node in enumerate(nodes):
-##    print("No {0}: ({1}; {2})".format(inode,node.x,node.y))
-##print()
-
-Dt = 0.05
-tot_t = 100.0
 nsteps = int(tot_t / Dt)
 
 # Constantes de integracao
@@ -337,7 +98,6 @@ for DOF in elimDOFs:
     R = np.delete(R, DOF, 0)
 
 # Forca periodica
-T = 30.0
 w = 2.0*np.pi/T
 t = np.linspace(0.0, tot_t, nsteps+1)
 FF = np.vstack([Fi*np.sin(w*t) for Fi in F])
@@ -552,33 +312,35 @@ E = lambda i: (SS[i+1]-SS[i])/(ee[i+1]-ee[i])
 
 import matplotlib.pyplot as plt
 
-fig = plt.figure(figsize=(10,5))
-plt.plot(ee,SS,'-o')
+if STBK:
 
-Eaux = Plasticity1D(E1,E2,Sy)
-e_ana = np.hstack([
-    np.linspace(0,ee.max(),10000),
-    np.linspace(ee.max(),ee.min(),10000),
-    np.linspace(ee.min(),0,10000),
-])
-#e_ana = np.insert(e_ana,len(e_ana)-sum(e_ana>ecrit),ecrit)
-#S_ana = np.array([S_x_e(e) for e in e_ana])
-S_ana = np.array([])
-for e in e_ana:
-    Eaux.update(e = e)
-    S_ana = np.append(S_ana, Eaux.S)
-plt.plot(e_ana,S_ana,'-')
-
-plt.xlabel("e")
-plt.ylabel("S")
-plt.show()
+    fig = plt.figure(figsize=(10,5))
+    plt.plot(ee,SS,'-o')
+    
+    Eaux = Plasticity1D(E1,E2,Sy)
+    e_ana = np.hstack([
+        np.linspace(0,ee.max(),10000),
+        np.linspace(ee.max(),ee.min(),10000),
+        np.linspace(ee.min(),0,10000),
+    ])
+    #e_ana = np.insert(e_ana,len(e_ana)-sum(e_ana>ecrit),ecrit)
+    #S_ana = np.array([S_x_e(e) for e in e_ana])
+    S_ana = np.array([])
+    for e in e_ana:
+        Eaux.update(e = e)
+        S_ana = np.append(S_ana, Eaux.S)
+    plt.plot(e_ana,S_ana,'-')
+    
+    plt.xlabel("e")
+    plt.ylabel("S")
+    plt.show()
 
 if DEBUG == False:
 
     data = np.transpose(U)
     t = np.linspace(0, nsteps*Dt, nsteps+1)
     
-    #N = int(1.0*nsteps)
+    ###N = int(1.0*nsteps)
     N = int(1.0*nsteps-510)
     
     fig = plt.figure(figsize=(10,5))
