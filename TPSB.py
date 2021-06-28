@@ -5,20 +5,6 @@ try:
 except:
     exec(open('in1.py').read())
 
-nnodes = len(nodes)
-dimK = nnodes*2 # caso bidimensional
-
-elimDOFs.sort(reverse=True)
-nodeMap = {}
-imap = 0
-for idof in range(dimK):
-    if idof in elimDOFs:
-        nodeMap[idof] = None
-    else:
-        nodeMap[idof] = imap
-        imap = imap + 1
-#print(nodeMap)
-
 def add_Kel_to_K(element):
     inode1 = element.node1.i
     inode2 = element.node2.i
@@ -52,6 +38,20 @@ def add_Rel_to_R(element):
         for i in [0,1]:
             R[I+i][0] = R[I+i][0] + element.Rel[N+i][0]
 
+nnodes = len(nodes)
+dimK = nnodes*2 # caso bidimensional
+
+elimDOFs.sort(reverse=True)
+nodeMap = {}
+imap = 0
+for idof in range(dimK):
+    if idof in elimDOFs:
+        nodeMap[idof] = None
+    else:
+        nodeMap[idof] = imap
+        imap = imap + 1
+#print(nodeMap)
+
 # Matriz de rigidez global
 K = np.zeros((dimK,dimK))
 for i,el in enumerate(els):
@@ -70,8 +70,6 @@ for DOF in elimDOFs:
     M = np.delete(M, DOF, 0)
     M = np.delete(M, DOF, 1)
 
-nsteps = int(tot_t / Dt)
-
 # Constantes de integracao
 alpha = 0.25
 beta = 0.5
@@ -85,6 +83,7 @@ ic[5] = Dt * (beta / alpha - 2.0) / 2.0
 ic[6] = Dt * (1.0 - beta)
 ic[7] = beta * Dt
 
+nsteps = int(tot_t / Dt)
 U = np.zeros((nsteps+1,len(F),1))
 V = np.zeros((nsteps+1,len(F),1))
 A = np.zeros((nsteps+1,len(F),1))
@@ -102,9 +101,12 @@ w = 2.0*np.pi/T
 t = np.linspace(0.0, tot_t, nsteps+1)
 FF = np.vstack([Fi*np.sin(w*t) for Fi in F])
 
-LL = np.array([0])
-ee = np.array([0])
-SS = np.array([0])
+##LL = np.array([0])
+##ee = np.array([0])
+##SS = np.array([0])
+LL = np.zeros((nsteps+1,1))
+ee = np.zeros((nsteps+1,1))
+SS = np.zeros((nsteps+1,1))
 
 import time
 import sys
@@ -124,14 +126,14 @@ def dprint(*args):
 
 DEBUG = False
 if DEBUG:
-    nsteps = 610
+    nsteps = 251
     progress_bar = lambda *args: None
 else:
     dprint = lambda *args: None
 
 step = 0
 iters = []
-STBK = True
+STBK = False
 while step < nsteps:
 
     step = step + 1
@@ -172,73 +174,79 @@ while step < nsteps:
         for i,el in enumerate(els):
             el.update_Kloc()
             E = el.material.E
-            if isinstance(E, Plasticity1D) and STBK:
+            if isinstance(E, Plasticity1D):
+                
+                if STBK:
             
-                dprint("----- STEPBACK")
-                
-                if niter == 1:
-                    el.e_i = E.e
-                    el.S_i = E.S
-                    dprint("DEF. INICIAL = {}".format(E.e))
-                    dprint("TENSAO INICIAL = {}".format(E.S))
-                    dprint("FORCA INICIAL = {}".format(E.S*el.material.A))
+                    dprint("----- STEPBACK")
                     
-                inode1x = 2*el.node1.i
-                inode1y = 2*el.node1.i+1
-                Floc1x = FE[nodeMap[inode1x]] if isinstance(nodeMap[inode1x],int) else 0
-                Floc1y = FE[nodeMap[inode1y]] if isinstance(nodeMap[inode1y],int) else 0
-                Floc1 = Floc1x*el.cos + Floc1y*el.sen
-                inode2x = 2*el.node2.i
-                inode2y = 2*el.node2.i+1
-                Floc2x = FE[nodeMap[inode2x]] if isinstance(nodeMap[inode2x],int) else 0
-                Floc2y = FE[nodeMap[inode2y]] if isinstance(nodeMap[inode2y],int) else 0
-                Floc2 = Floc2x*el.cos + Floc2y*el.sen
-                Floc = Floc2 - Floc1
+                    if niter == 1:
+                        el.e_i = E.e
+                        el.S_i = E.S
+                        dprint("DEF. INICIAL = {}".format(E.e))
+                        dprint("TENSAO INICIAL = {}".format(E.S))
+                        dprint("FORCA INICIAL = {}".format(E.S*el.material.A))
+                        
+                    inode1x = 2*el.node1.i
+                    inode1y = 2*el.node1.i+1
+                    Floc1x = FE[nodeMap[inode1x]] if isinstance(nodeMap[inode1x],int) else 0
+                    Floc1y = FE[nodeMap[inode1y]] if isinstance(nodeMap[inode1y],int) else 0
+                    Floc1 = Floc1x*el.cos + Floc1y*el.sen
+                    inode2x = 2*el.node2.i
+                    inode2y = 2*el.node2.i+1
+                    Floc2x = FE[nodeMap[inode2x]] if isinstance(nodeMap[inode2x],int) else 0
+                    Floc2y = FE[nodeMap[inode2y]] if isinstance(nodeMap[inode2y],int) else 0
+                    Floc2 = Floc2x*el.cos + Floc2y*el.sen
+                    Floc = Floc2 - Floc1
+                    
+                    dprint("Forcas locais no 1")
+                    dprint(Floc1x,Floc1y,Floc1)
+                    dprint("Forcas locais no 2")
+                    dprint(Floc2x,Floc2y,Floc2)
+                    dprint("Forca local total")
+                    dprint(Floc)
+                    
+                    S_f = Floc/el.material.A
+                    e_i = el.e_i
+                    S_i = el.S_i
+                    
+                    ##if DEBUG:
+                    ##    e_f = S_f/E1
+                    ##    if S_f > Sy:
+                    ##        e_f = Sy/E1 + (S_f-Sy)/E2
+                    ##else:
+                    ##    E.backup()
+                    ##    E.update(S = S_f)
+                    ##    e_f = E.e
+                    ##    E.restore()
+                    E.backup()
+                    E.update(S = S_f)
+                    e_f = E.e
+                    E.restore()
+                    
+                    de = e_f - e_i
+                    dS = S_f - S_i
+                    Esec = abs(dS/de)
+                    Esec = np.where(np.isnan(Esec),0,Esec)
+                    
+                    dprint("NOVA TENSAO = {}".format(S_f))
+                    dprint("NOVA DEF. = {}".format(e_f))
+                    dprint(dS,de,Esec)
+                    
+                    Ksec = Esec*el.material.A/el.l0
+                    el.Ksec = Ksec[0]
+                    dprint(el.Ksec,el.Kloc)
+                    el.Kloc = np.where(el.Ksec == 0,el.Kloc,el.Ksec)
+                    dprint(el.Ksec,el.Kloc)
                 
-                dprint("Forcas locais no 1")
-                dprint(Floc1x,Floc1y,Floc1)
-                dprint("Forcas locais no 2")
-                dprint(Floc2x,Floc2y,Floc2)
-                dprint("Forca local total")
-                dprint(Floc)
+                ##if niter == 1:
+                ##    ##LL = np.append(LL,(el2.length-el2.l0)/el2.l0)
+                ##    ee = np.append(ee,E.e)
+                ##    SS = np.append(SS,E.S)
+                ee[step] = E.e
+                SS[step] = E.S
                 
-                S_f = Floc/el.material.A
-                e_i = el.e_i
-                S_i = el.S_i
-                
-                ##if DEBUG:
-                ##    e_f = S_f/E1
-                ##    if S_f > Sy:
-                ##        e_f = Sy/E1 + (S_f-Sy)/E2
-                ##else:
-                ##    E.backup()
-                ##    E.update(S = S_f)
-                ##    e_f = E.e
-                ##    E.restore()
-                E.backup()
-                E.update(S = S_f)
-                e_f = E.e
-                E.restore()
-                
-                de = e_f - e_i
-                dS = S_f - S_i
-                Esec = abs(dS/de)
-                Esec = np.where(np.isnan(Esec),0,Esec)
-                
-                dprint("NOVA TENSAO = {}".format(S_f))
-                dprint("NOVA DEF. = {}".format(e_f))
-                dprint(dS,de,Esec)
-                
-                Ksec = Esec*el.material.A/el.l0
-                el.Ksec = Ksec[0]
-                dprint(el.Ksec,el.Kloc)
-                el.Kloc = np.where(el.Ksec == 0,el.Kloc,el.Ksec)
-                dprint(el.Ksec,el.Kloc)
-                
-                if niter == 1:
-                    ##LL = np.append(LL,(el2.length-el2.l0)/el2.l0)
-                    ee = np.append(ee,E.e)
-                    SS = np.append(SS,E.S)
+            dprint(el.Kloc)
         
         # atualiza K
         K = np.zeros((dimK,dimK))
@@ -312,7 +320,8 @@ E = lambda i: (SS[i+1]-SS[i])/(ee[i+1]-ee[i])
 
 import matplotlib.pyplot as plt
 
-if STBK:
+#if STBK or DEBUG:
+if True:
 
     fig = plt.figure(figsize=(10,5))
     plt.plot(ee,SS,'-o')
@@ -340,8 +349,8 @@ if DEBUG == False:
     data = np.transpose(U)
     t = np.linspace(0, nsteps*Dt, nsteps+1)
     
-    ###N = int(1.0*nsteps)
-    N = int(1.0*nsteps-510)
+    N = int(1.0*nsteps)
+    ###N = int(1.0*nsteps-510)
     
     fig = plt.figure(figsize=(10,5))
     plt.subplot(311)
