@@ -144,6 +144,11 @@ while step < nsteps:
     niter = 0
     Rnorm = np.inf
     
+    for el in els:
+        E = el.material.E
+        if isinstance(E, Plasticity1D):
+            E.backup()
+    
     while Rnorm > 0.001 and niter < 500:
     
         niter = niter + 1
@@ -172,8 +177,10 @@ while step < nsteps:
         dprint()
         
         for i,el in enumerate(els):
-            el.update_Kloc()
             E = el.material.E
+            if isinstance(E, Plasticity1D):
+                E.restore()
+            el.update_Kloc()
             if isinstance(E, Plasticity1D):
                 
                 if STBK:
