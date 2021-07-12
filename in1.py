@@ -3,7 +3,8 @@ from classes import Material, Node, Element, Plasticity1D
 A = 1.0e-3
 E1 = 2.08e11
 m = 0
-E2 = 2.08e9
+##E2 = 2.08e9
+E2 = 3.08e9
 ##Sy = 2.0e9
 Sy = 1.98e9
 mat1 = Material(E1,A,m)
@@ -20,8 +21,8 @@ els = [el1,el2]
 elimDOFs = [0,1,3,5]
 ##elimDOFs = [0,1,3,4]
 
-T = 30.0
-F = [0,4.0e6]
+T = 25.07
+F = [0,2.5e6]
 
 Dt = 0.05
 tot_t = 100.0
