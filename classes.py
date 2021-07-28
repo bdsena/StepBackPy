@@ -101,6 +101,7 @@ class Element:
         self.node2 = node2
         dx = node2.x - node1.x
         dy = node2.y - node1.y
+        self.f = 1
         self.l0 = np.sqrt(dx*dx+dy*dy)
         self.Mel = self.Mel*self.material.M*self.material.A*self.l0/2
     def update_Rloc(self):
@@ -114,8 +115,10 @@ class Element:
         # Forcas internas
         e = (length-self.l0)/self.l0
         if isinstance(self.material.E, Plasticity1D):
-            self.material.E.update(e = e)
-            S = self.material.E.S
+            ##self.material.E.update(e = e)
+            ##S = self.material.E.S
+            S = self.material.E.E*e
+            #S = self.f*self.material.E.E*e
         else:
             S = self.material.E*e
         self.Rloc = S*self.material.A
@@ -140,13 +143,15 @@ class Element:
         if isinstance(self.material.E, Plasticity1D):
             #self.material.E.update(e = e)
             S = self.material.E.S
-            E = self.material.E.Ec
-            #E = self.material.E.E
+            #E = self.material.E.Ec
+            ###################print(self.f)
+            E = self.f*self.material.E.E
         else:
             E = self.material.E
             S = self.material.E*e
         self.Kloc = E*self.material.A/self.l0
         self.Cnl = S*self.material.A/self.length
+        #print(self.Kloc, self.Cnl)
     
     def update_Kel(self):
         ##self.update_Kloc()
