@@ -219,20 +219,16 @@ while step < nsteps:
         NRP_Loop = False
         if STBK:
             for el in els:
-                E = deepcopy(el.material.E)
-                #E = el.material.E
+                E = el.material.E
                 if isinstance(E, Plasticity1D):
                     
                     S_f = E.S
-                    #E.restore()
-                    #S_i = E.S
-                    #e_i = E.e
                     S_i = E.S_bak
                     e_i = E.e_bak
                     #print()
                     #print("e_in = ",E.e_in)
-                    #print("update")
-                    E.update(S = S_f) # falta acrescentar o e_in para chegar na 'quina' e saber voltar
+                    #print("consulta")
+                    E.inverse(S_f)
                     #print("e_in = ",E.e_in)
                     e_f = E.e
                     
@@ -259,10 +255,6 @@ while step < nsteps:
                         el.f = f_new
                         #print(el.f)
                         NRP_Loop = True
-                    
-                    el.material.E.e = E.e
-                    el.material.E.e_in = E.e_in
-                    el.material.E.beta = E.beta
                     
             if NRP_Loop:
                 
