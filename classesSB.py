@@ -15,25 +15,84 @@ class Plasticity1D:
         self.beta = 0  # Variavel de controle da plasticidade
         self.Ec = E    # Modulo de elasticidade atual
         self.S = 0     # Tensao atual
+        self.e = 0     # Deformacao atual
+        
+        self.e_in_bak = 0
+        self.beta_bak = 0
+        self.Ec_bak = E
+        self.S_bak = 0
+        self.e_bak = 0
+
+    def backup(self):
+        self.e_in_bak = self.e_in
+        self.beta_bak = self.beta
+        self.Ec_bak = self.Ec
+        self.S_bak = self.S
+        self.e_bak = self.e
+    def restore(self):
+        self.e_in = self.e_in_bak
+        self.beta = self.beta_bak
+        self.Ec = self.Ec_bak
+        self.S = self.S_bak
+        self.e = self.e_bak
 
     # Atualiza o estado de tensao
-    def update(self, e):
-    
-        # Calcula como se fosse regime elastico
-        e_e = e - self.e_in
-        self.S = self.E * e_e
-        self.Ec = self.E
-    
-        # Verifica e faz a correcao plastica
-        f = abs(self.S - self.beta) - self.Sy
-        if (f > 0):
-            # Corrige a tensao e incrementa a parcela inelastica da deformacao
-            self.Ec = self.Et
-            r = self.S / abs(self.S)
-            l = f / (self.E + self.H)
-            self.S = self.S - self.E * l * r
-            self.e_in = self.e_in + l * r
-            self.beta = self.beta + l * self.H * r
+    def update(self, **kwargs):
+        if 'e' in kwargs:
+            # Calcula como se fosse regime elastico
+            e_new = kwargs.get('e')
+            f = kwargs.get('f')
+            force_linear = kwargs.get('force_linear') or None
+            if force_linear:
+                de = e_new - self.e
+                ##print("e_new = ",e_new)
+                ##print("self.e = ",self.e)
+                ##print("de = ",de)
+                ##print("el.f = ",f)
+                ##print("self.E = ",self.E)
+                Ec = f * self.E
+                ##print("Ec = ",Ec)
+                ##print("self.S = ",self.S)
+                self.S = self.S + Ec*de
+                self.e = e_new
+                ##print("self.S = ",self.S)
+            else:
+                self.e = e_new
+                e_e = self.e - self.e_in
+                self.S = self.E * e_e
+                self.Ec = self.E
+                # Verifica e faz a correcao plastica
+                f = abs(self.S - self.beta) - self.Sy
+                if f > 0:
+                    # Corrige a tensao e incrementa a parcela inelastica da deformacao
+                    self.Ec = self.Et
+                    r = self.S / abs(self.S)
+                    l = f / (self.E + self.H)
+                    self.S = self.S - self.E * l * r
+                    self.e_in = self.e_in + l * r
+                    self.beta = self.beta + l * self.H * r
+        elif 'S' in kwargs:
+            # Calcula como se fosse regime elastico
+            self.S = kwargs.get('S')
+            e_e = self.S / self.E
+            self.e = e_e + self.e_in
+            self.Ec = self.E
+            # Verifica e faz a correcao plastica
+            f = abs(self.S - self.beta) - self.Sy
+            if f > 0:
+                # Corrige a tensao e incrementa a parcela inelastica da deformacao
+                self.Ec = self.Et
+                r = self.S / abs(self.S)
+                r2 = (self.S - self.beta) / abs(self.S - self.beta)
+                C0 = (1+self.H/self.E)
+                self.S = (C0*r*self.S - self.Sy - r2*self.beta) / (C0*r - r2)
+                f = abs(self.S - self.beta) - self.Sy
+                l = f / (self.E + self.H)
+                self.e = self.e + l * r
+                self.e_in = self.e_in + l * r
+                self.beta = self.beta + l * self.H * r
+        else:
+            raise KeyError("Invalid key to function Plasticity1D.update()")
 
 class Node:
     def __init__(self,i,x,y):
@@ -50,6 +109,7 @@ class Material:
         self.M = M
 
 class Element:
+    f = 1
     Rel = np.ones((4,1))
     Kel = np.ones((4,4))
     Mel = np.diag((1,1,1,1))
@@ -68,11 +128,11 @@ class Element:
         self.cos = dx/length
         self.sen = dy/length
         self.length = length
-    def update_Rloc(self):
+    def update_Rloc(self, force_linear=False):
         # Forcas internas
         e = (self.length-self.l0)/self.l0
         if isinstance(self.material.E, Plasticity1D):
-            self.material.E.update(e)
+            self.material.E.update(e = e, force_linear=force_linear, f=self.f)
             S = self.material.E.S
         else:
             S = self.material.E*e
@@ -95,9 +155,9 @@ class Element:
         
         e = (length-self.l0)/self.l0
         if isinstance(self.material.E, Plasticity1D):
-            self.material.E.update(e)
+            #self.material.E.update(e = e)
             S = self.material.E.S
-            E = self.material.E.Ec
+            E = self.material.E.E*self.f
         else:
             E = self.material.E
             S = self.material.E*e

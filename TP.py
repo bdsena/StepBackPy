@@ -4,7 +4,7 @@ from copy import deepcopy
 try:
     exec(open(fname).read())
 except:
-    exec(open('in1.py').read())
+    exec(open('in0.py').read())
 
 def add_Kel_to_K(element):
     inode1 = element.node1.i
@@ -99,9 +99,6 @@ for i,el in enumerate(els):
 for DOF in elimDOFs:
     R = np.delete(R, DOF, 0)
 
-STBK = True
-Rbak = np.copy(R)
-
 # Forca periodica
 w = 2.0*np.pi/T
 t = np.linspace(0.0, tot_t, nsteps+1)
@@ -144,22 +141,12 @@ while step < nsteps:
     step = step + 1
     ia = step - 1
     
-    for el in els:
-        E = el.material.E
-        if isinstance(E, Plasticity1D):
-            E.backup()
-    
-    step_iters = []
-    
-    NRP_Loop = True
-    while NRP_Loop:
+    if True:
     
         U[step] = U[ia]
         
         niter = 0
         Rnorm = np.inf
-        
-        Rbak = np.copy(R)
         
         while Rnorm > 0.001 and niter < 500:
         
@@ -204,91 +191,15 @@ while step < nsteps:
             R = np.zeros((dimK,1))
             for i,el in enumerate(els):
                 el.update_length()
-                el.update_Rloc(force_linear=STBK)
+                el.update_Rloc()
                 el.update_Rel()
                 add_Rel_to_R(el)
             for DOF in elimDOFs:
                 R = np.delete(R, DOF, 0)
             
             # reavalia residuo
-            dR = FE - R # ####### INCLUIR "DF"
+            dR = FE - R
             Rnorm = np.linalg.norm(dR)
-        
-        step_iters.append(niter)
-        
-        NRP_Loop = False
-        if STBK:
-            for el in els:
-                E = deepcopy(el.material.E)
-                #E = el.material.E
-                if isinstance(E, Plasticity1D):
-                    
-                    S_f = E.S
-                    #E.restore()
-                    #S_i = E.S
-                    #e_i = E.e
-                    S_i = E.S_bak
-                    e_i = E.e_bak
-                    #print()
-                    #print("e_in = ",E.e_in)
-                    #print("update")
-                    E.update(S = S_f) # falta acrescentar o e_in para chegar na 'quina' e saber voltar
-                    #print("e_in = ",E.e_in)
-                    e_f = E.e
-                    
-                    #print('S_i = ',S_i)
-                    #print('S_f = ',S_f)
-                    #print('e_i = ',e_i)
-                    #print('e_f = ',e_f)
-                    
-                    dS = S_f - S_i
-                    de = e_f - e_i
-                    Esec = abs(dS/de)
-                    Esec = np.where(np.isnan(Esec),0,Esec)
-                    f_new = Esec/E.E
-                    
-                    #print('dS = ',dS)
-                    #print('de = ',de)
-                    #print('Esec = ',Esec)
-                    #print('f_new = ',f_new)
-                    
-                    dF = dS*el.material.A
-                    
-                    err = (f_new - el.f) / el.f
-                    if abs(err) > 1e-3:
-                        el.f = f_new
-                        #print(el.f)
-                        NRP_Loop = True
-                    
-                    el.material.E.e = E.e
-                    el.material.E.e_in = E.e_in
-                    el.material.E.beta = E.beta
-                    
-            if NRP_Loop:
-                
-                R = np.copy(Rbak)
-                
-                # restaura nos a partir de U
-                for node in nodes:
-                    DOFx = nodeMap[2*node.i]
-                    DOFy = nodeMap[2*node.i+1]
-                    if DOFx != None:
-                        node.x = node.x0 + U[ia][DOFx][0]
-                    if DOFy != None:
-                        node.y = node.y0 + U[ia][DOFy][0]
-                
-                for el in els:
-                    E = el.material.E
-                    if isinstance(E, Plasticity1D):
-                        Ec = E.Ec
-                        E.restore()
-                        E.Ec = Ec
-            
-            ##for el in els:
-            ##    E = el.material.E
-            ##    if isinstance(E, Plasticity1D):
-            ##        #print("check")
-            ##        #print("e_in = ",E.e_in)
     
     # Atualiza aceleracoes e velocidades
     A[step] = ic[0] * (U[step] - U[ia]) - ic[2] * V[ia] - ic[3] * A[ia]
@@ -304,7 +215,7 @@ while step < nsteps:
     ee = np.hstack([ee, np.transpose([new_ee])])
     SS = np.hstack([SS, np.transpose([new_SS])])
     
-    iters.add(step_iters)
+    iters.add([niter])
     progress_bar(step,nsteps)
 
 print()
@@ -329,4 +240,4 @@ for i,node in enumerate(nodes):
         ynodes[:,i] = ynodes[:,i]*node.y0
 
 dofs = np.array([nodeMap[k] for k in nodeMap], dtype=float)
-np.savez('outSB.npz',t=t,desl=desl,FF=FF,ee=ee,SS=SS,xnodes=xnodes,ynodes=ynodes,dofs=dofs,ndof=2)
+np.savez('out.npz',t=t,desl=desl,FF=FF,ee=ee,SS=SS,xnodes=xnodes,ynodes=ynodes,dofs=dofs,ndof=2)
