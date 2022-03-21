@@ -1,8 +1,9 @@
+import sys
 import numpy as np
 from copy import deepcopy
 
 try:
-    exec(open(fname).read())
+    exec(open(sys.argv[1]).read())
 except:
     exec(open('in0.py').read())
 

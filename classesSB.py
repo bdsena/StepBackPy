@@ -120,11 +120,13 @@ class Element:
     def update_Rloc(self, force_linear=False):
         # Forcas internas
         e = (self.length-self.l0)/self.l0
-        if isinstance(self.material.E, Plasticity1D):
+        E = self.material.E
+        if isinstance(E, Plasticity1D):
             if force_linear:
-                self.material.E.update_linear(e, self.f)
+                E.update_linear(e, self.f)
             else:
-                self.material.E.update(e)
+                E.update(e)
+                self.f = E.Ec/E.E
             S = self.material.E.S
         else:
             S = self.material.E*e
@@ -147,7 +149,7 @@ class Element:
         
         e = (length-self.l0)/self.l0
         if isinstance(self.material.E, Plasticity1D):
-            #self.material.E.update(e = e)
+            #self.material.E.update(e)
             S = self.material.E.S
             E = self.material.E.E*self.f
         else:

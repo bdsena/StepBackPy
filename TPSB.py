@@ -1,8 +1,9 @@
+import sys
 import numpy as np
 from copy import deepcopy
 
 try:
-    exec(open(fname).read())
+    exec(open(sys.argv[1]).read())
 except:
     exec(open('in1.py').read())
 
@@ -99,7 +100,7 @@ for i,el in enumerate(els):
 for DOF in elimDOFs:
     R = np.delete(R, DOF, 0)
 
-STBK = True
+STBK = ('false' not in [s.lower() for s in sys.argv])
 Rbak = np.copy(R)
 
 # Forca periodica
@@ -300,7 +301,8 @@ while step < nsteps:
     progress_bar(step,nsteps)
 
 print()
-#print(iters.values)
+if 'iters' in sys.argv:
+    print(iters.values)
 print(iters.sum())
 
 desl = np.transpose(U)[0]
@@ -321,4 +323,4 @@ for i,node in enumerate(nodes):
         ynodes[:,i] = ynodes[:,i]*node.y0
 
 dofs = np.array([nodeMap[k] for k in nodeMap], dtype=float)
-np.savez('outSB.npz',t=t,desl=desl,FF=FF,ee=ee,SS=SS,xnodes=xnodes,ynodes=ynodes,dofs=dofs,ndof=2)
+np.savez('outSB.npz' if STBK else 'out.npz',t=t,desl=desl,FF=FF,ee=ee,SS=SS,xnodes=xnodes,ynodes=ynodes,dofs=dofs,ndof=2)

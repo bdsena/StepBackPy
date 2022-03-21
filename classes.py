@@ -95,7 +95,7 @@ class Element:
         
         e = (length-self.l0)/self.l0
         if isinstance(self.material.E, Plasticity1D):
-            self.material.E.update(e)
+            #self.material.E.update(e)
             S = self.material.E.S
             E = self.material.E.Ec
         else:
