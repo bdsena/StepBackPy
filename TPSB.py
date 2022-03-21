@@ -146,9 +146,7 @@ while step < nsteps:
     ia = step - 1
     
     for el in els:
-        E = el.material.E
-        if isinstance(E, Plasticity1D):
-            E.backup()
+        el.backup_E()
     
     step_iters = []
     
@@ -219,44 +217,10 @@ while step < nsteps:
         
         NRP_Loop = False
         if STBK:
+        
             for el in els:
-                E = el.material.E
-                if isinstance(E, Plasticity1D):
-                    
-                    S_f = E.S
-                    S_i = E.S_bak
-                    e_i = E.e_bak
-                    #print()
-                    #print("e_in = ",E.e_in)
-                    #print("consulta")
-                    E.inverse(S_f)
-                    #print("e_in = ",E.e_in)
-                    e_f = E.e
-                    
-                    #print('S_i = ',S_i)
-                    #print('S_f = ',S_f)
-                    #print('e_i = ',e_i)
-                    #print('e_f = ',e_f)
-                    
-                    dS = S_f - S_i
-                    de = e_f - e_i
-                    Esec = abs(dS/de)
-                    Esec = np.where(np.isnan(Esec),0,Esec)
-                    f_new = Esec/E.E
-                    
-                    #print('dS = ',dS)
-                    #print('de = ',de)
-                    #print('Esec = ',Esec)
-                    #print('f_new = ',f_new)
-                    
-                    dF = dS*el.material.A
-                    
-                    err = (f_new - el.f) / el.f
-                    if abs(err) > 1e-3:
-                        el.f = f_new
-                        #print(el.f)
-                        NRP_Loop = True
-                    
+                NRP_Loop = NRP_Loop or el.NRP_check()
+                
             if NRP_Loop:
                 
                 R = np.copy(Rbak)
@@ -271,17 +235,7 @@ while step < nsteps:
                         node.y = node.y0 + U[ia][DOFy][0]
                 
                 for el in els:
-                    E = el.material.E
-                    if isinstance(E, Plasticity1D):
-                        Ec = E.Ec
-                        E.restore()
-                        E.Ec = Ec
-            
-            ##for el in els:
-            ##    E = el.material.E
-            ##    if isinstance(E, Plasticity1D):
-            ##        #print("check")
-            ##        #print("e_in = ",E.e_in)
+                    el.restore_E()
     
     # Atualiza aceleracoes e velocidades
     A[step] = ic[0] * (U[step] - U[ia]) - ic[2] * V[ia] - ic[3] * A[ia]
