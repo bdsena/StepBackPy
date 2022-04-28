@@ -11,7 +11,7 @@ except:
 data = np.load(fname)
 t = data['t']
 desl = data['desl']
-FF = data['FF'][1]
+FF = data['FF'][-1]
 SS = data['SS']
 ee = data['ee']
 xnodes = data['xnodes']
@@ -35,6 +35,7 @@ nodesel, = ax[1,0].plot([xnodes[-1][0]], [ynodes[-1][0]], 'r-o')
 line4, = ax[1,1].plot(ee[0], SS[0])
 line4t, = ax[1,1].plot(ee[0][-1], SS[0][-1], 'r-o')
 ax[0,0].set_xlabel('Time [s]')
+ax[1,0].axis('equal')
 
 # adjust the main plot to make room for the sliders
 plt.subplots_adjust(bottom=0.20)
@@ -67,7 +68,7 @@ def update(val):
     inode = int(nodeslider.val)
     idof = int(dofslider.val)
     idesl = dofs[inode*ndof+idof]
-    line1.set_data(t[:npt], FF[:npt])
+    line1.set_data(t[:npt+1], FF[:npt+1])
     if np.isnan(idesl):
         line2.set_data([], [])
     else:
@@ -75,9 +76,11 @@ def update(val):
         line2.set_data(t[:npt], ydata[:npt])
         resize_y(ax[0,1], ydata)
     line3.set_data(xnodes[npt], ynodes[npt])
+    resize_x(ax[1,0], xnodes[npt])
+    resize_y(ax[1,0], ynodes[npt])
     nodesel.set_data(xnodes[npt][inode], ynodes[npt][inode])
     elemsel.set_data(xnodes[npt][iel:iel+2], ynodes[npt][iel:iel+2])
-    line4.set_data(ee[iel][:npt], SS[iel][:npt])
+    line4.set_data(ee[iel][:npt+1], SS[iel][:npt+1])
     line4t.set_data(ee[iel][npt], SS[iel][npt])
     resize_x(ax[1,1], ee[iel])
     resize_y(ax[1,1], SS[iel])

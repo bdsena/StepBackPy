@@ -55,6 +55,7 @@ class Beam:
         
         self.EA = E*A
         self.EI = E*I
+        self.EIc = E*I
         self.I = I
         
         lumped_mass = True
@@ -318,23 +319,64 @@ class HysBeam(Beam):
     
         #Dados do material
         EI = self.EI
-        EIt = EI/100
+        EIt = EI/2.
         #self.EI = EI    # Modulo de elasticidade
         self.EIt = EIt  # Modulo de elasticidade tangente
         self.Mc = material.Mc  # Momento critico
         self.H = EI * EIt / (EI - EIt) # Modulo de encruamento
+        self.H1 = EI * EIt / (EI - EIt) # Modulo de encruamento
+        self.H2 = EI * EIt / (EI - EIt) # Modulo de encruamento
     
         #Variaveis de estado
         self.k_in = 0  # Parcela inelastica das deformacoes
+        self.k1_in = 0  # Parcela inelastica das deformacoes
+        self.k2_in = 0  # Parcela inelastica das deformacoes
         self.beta = 0  # Variavel de controle da plasticidade
+        self.beta1 = 0  # Variavel de controle da plasticidade
+        self.beta2 = 0  # Variavel de controle da plasticidade
         self.EIc = EI  # Modulo de elasticidade atual
+        self.EIc1 = EI  # Modulo de elasticidade atual
+        self.EIc2 = EI  # Modulo de elasticidade atual
         self.M = 0     # Momento atual
+        self.M1 = 0     # Momento atual
+        self.M2 = 0     # Momento atual
 
     # Atualiza o estado de tensao
-    def update_EI(self, k):
-    
+    def update_M1(self):
         # Calcula como se fosse regime elastico
-        k_e = k - self.k_in
+        k1_e = self.k1 - self.k1_in
+        self.M1 = self.EI * k1_e
+        self.EIc1 = self.EI
+    
+        # Verifica e faz a correcao plastica
+        f = abs(self.M1 - self.beta1) - self.Mc
+        if (f > 0):
+            # Corrige a tensao e incrementa a parcela inelastica da deformacao
+            self.EIc1 = self.EIt
+            r = self.M1 / abs(self.M1)
+            l = f / (self.EI + self.H1)
+            self.M1 = self.M1 - self.EI * l * r
+            self.k1_in = self.k1_in + l * r
+            self.beta1 = self.beta1 + l * self.H1 * r
+    def update_M2(self):
+        # Calcula como se fosse regime elastico
+        k2_e = self.k2 - self.k2_in
+        self.M2 = self.EI * k2_e
+        self.EIc2 = self.EI
+    
+        # Verifica e faz a correcao plastica
+        f = abs(self.M2 - self.beta2) - self.Mc
+        if (f > 0):
+            # Corrige a tensao e incrementa a parcela inelastica da deformacao
+            self.EIc2 = self.EIt
+            r = self.M2 / abs(self.M2)
+            l = f / (self.EI + self.H2)
+            self.M2 = self.M2 - self.EI * l * r
+            self.k2_in = self.k2_in + l * r
+            self.beta2 = self.beta2 + l * self.H2 * r
+    def update_M(self):
+        # Calcula como se fosse regime elastico
+        k_e = self.k - self.k_in
         self.M = self.EI * k_e
         self.EIc = self.EI
     
@@ -349,10 +391,27 @@ class HysBeam(Beam):
             self.k_in = self.k_in + l * r
             self.beta = self.beta + l * self.H * r
     
-    def update_length(self):
-        super().update_length()
-        k = (self.a1 + self.a2)/2
-        self.update_EI(k)
+    #def update_length(self):
+    #    super().update_length()
+    #    self.k = (self.a1-self.a2)/self.L0
+    #    self.update_M()
+    def update_Rloc(self):
+        super().update_Rloc()
+        self.k1 = 2.*(2.*self.a1+self.a2)/self.L0
+        self.k2 = 2.*(self.a1+2.*self.a2)/self.L0
+        self.update_M1()
+        self.update_M2()
+        self.Rloc[2] = self.M1
+        self.Rloc[5] = self.M2
+        ##self.k = (self.a2-self.a1)/self.L0
+        ###self.k = (self.k1-self.k2)/2
+        ##self.update_M()
+        ##if abs(self.k) > 1e-5:
+        ##    self.Rloc[2] = self.M*self.k1/self.k
+        ##    self.Rloc[5] = self.M*self.k2/self.k
+        ##else:
+        ##    self.Rloc[2] = 0.0
+        ##    self.Rloc[5] = 0.0
     
     def update_Kloc(self):
         #EI_bak = self.EI

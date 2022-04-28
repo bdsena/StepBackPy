@@ -103,7 +103,14 @@ for DOF in elimDOFs:
 w = 2.0*np.pi/T
 t = np.linspace(0.0, tot_t, nsteps+1)
 #FF = np.vstack([Fi*np.sin(w*t) for Fi in F])
-FF = np.vstack([Fi*t/tot_t for Fi in F])
+#ramp_func = np.linspace(0.0,1.0,nsteps+1)
+ramp_func = np.hstack([
+    np.linspace( 0.00, 1.00,int(nsteps/4)+1),
+    np.linspace( 1.00,-1.05,int(nsteps/2)+1)[1:],
+    np.linspace(-1.05, 0.05,int(nsteps/4)+1)[1:],
+])
+FF = np.vstack([Fi*ramp_func for Fi in F])
+print(FF[-1])
 
 ee = np.zeros((len(els),1))
 SS = np.zeros((len(els),1))
@@ -136,7 +143,7 @@ class Iters:
         return [len(i)-1 for i in self.values]
 
 step = 0
-maxiter = 30
+maxiter = 300
 iters = Iters()
 while step < nsteps:
 
@@ -254,9 +261,9 @@ while step < nsteps:
             #print(step)
             #print('niter')
             #print(niter)
-            #print()
-            #print(iters.values)
-            #print(iters.sum())
+            print()
+            print(iters.values)
+            print(iters.sum())
             exit()
     
     # Atualiza aceleracoes e velocidades
@@ -266,8 +273,8 @@ while step < nsteps:
     new_ee = []
     new_SS = []
     for i,el in enumerate(els):
-        new_e = el.a1
-        new_S = el.Rloc[2][0]
+        new_e = el.k1
+        new_S = el.M1
         new_ee.append(new_e)
         new_SS.append(new_S)
     ee = np.hstack([ee, np.transpose([new_ee])])
@@ -276,9 +283,9 @@ while step < nsteps:
     iters.add([niter])
     progress_bar(step,nsteps)
 
-#print()
-#print(iters.values)
-#print(iters.sum())
+print()
+print(iters.values)
+print(iters.sum())
 
 desl = np.transpose(U)[0]
 t = np.linspace(0, nsteps*Dt, nsteps+1)
