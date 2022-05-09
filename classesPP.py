@@ -31,9 +31,10 @@ class Beam:
     Rel = np.ones((6,1))
     Kel = np.ones((6,6))
     
-    def __init__(self,material,node1,node2):
+    def __init__(self,iel,material,node1,node2):
         self.node1 = node1
         self.node2 = node2
+        self.iel = iel
         
         dx = node2.x - node1.x
         dy = node2.y - node1.y
@@ -47,11 +48,6 @@ class Beam:
         self.E = E
         self.A = A
         self.I = I
-        #I = A**2/(4*np.pi)
-        #I = A**2/12
-        #print("E = {}".format(E))
-        #print("A = {}".format(A))
-        #print("I = {}".format(I))
         
         self.EA = E*A
         self.EI = E*I
@@ -93,20 +89,10 @@ class Beam:
         self.theta0 = np.arctan2(sen, cos)
         self.a1 = self.node1.a0 - self.theta0
         self.a2 = self.node2.a0 - self.theta0
-        
-        a1cos = np.cos(self.node1.a0)
-        a1sen = np.sin(self.node1.a0)
-        self.a1_T = np.array([
-            [ a1cos, a1sen],
-            [-a1sen, a1cos],
-        ])
-        a2cos = np.cos(self.node2.a0)
-        a2sen = np.sin(self.node2.a0)
-        self.a2_T = np.array([
-            [ a2cos, a2sen],
-            [-a2sen, a2cos],
-        ])
     
+    def backup(self):
+        pass
+
     def update_length(self):
         dx = self.node2.x - self.node1.x
         dy = self.node2.y - self.node1.y
@@ -115,57 +101,19 @@ class Beam:
         self.sen = dy/length
         self.length = length
         
-        a1inc_cos = np.cos(self.node1.ainc)
-        a1inc_sen = np.sin(self.node1.ainc)
-        a1inc_T = np.array([
-            [ a1inc_cos, a1inc_sen],
-            [-a1inc_sen, a1inc_cos],
-        ])
-        a2inc_cos = np.cos(self.node2.ainc)
-        a2inc_sen = np.sin(self.node2.ainc)
-        a2inc_T = np.array([
-            [ a2inc_cos, a2inc_sen],
-            [-a2inc_sen, a2inc_cos],
-        ])
+        self.theta = np.arctan2(self.sen, self.cos) - self.theta0
+        self.a1 = (self.node1.a - self.theta)
+        self.a2 = (self.node2.a - self.theta)
         
-        #self.a1_T = np.matmul(a1inc_T, self.a1_T)
-        #self.a2_T = np.matmul(a2inc_T, self.a2_T)
-        self.a1_T = np.matmul(self.a1_T, a1inc_T)
-        self.a2_T = np.matmul(self.a2_T, a2inc_T)
-        
-        #print('self.a1_T')
-        #print(self.a1_T)
-        #print('self.a2_T')
-        #print(self.a2_T)
-        
-        R = np.array([
-            [ self.cos, self.sen],
-            [-self.sen, self.cos],
-        ])
-        
-        ##self.a1 = np.arcsin(.5*( - np.dot(a1inc_T[1],R[0]) + np.dot(a1inc_T[0],R[1]) ))
-        ##self.a2 = np.arcsin(.5*( - np.dot(a2inc_T[1],R[0]) + np.dot(a2inc_T[0],R[1]) ))
-        
-        theta = np.arctan2(self.sen, self.cos)
-        #print("theta = ",theta)
-        #print("sen = ",self.sen)
-        #print("cos = ",self.cos)
-        #print("dl = ",self.length-self.L0)
-        beta = np.arctan2(self.sen, self.cos) - self.theta0
-        self.a1 = self.node1.a - beta
-        self.a2 = self.node2.a - beta
-        #print('length = ',length)
-        ####print('beta = ',beta)
-        #print('a1 = ',self.a1)
-        #print('a2 = ',self.a2)
+        self.k1 = -2.*(2.*self.a1+self.a2)/self.L0
+        self.k2 =  2.*(self.a1+2.*self.a2)/self.L0
     
     def update_Rloc(self):
-        # Forcas internas
         e = (self.length-self.L0)/self.L0
         N = self.EA*e
-        M1 = 2.*self.EI/self.L0*(2.*self.a1+self.a2)
-        M2 = 2.*self.EI/self.L0*(self.a1+2.*self.a2)
-        V = (M1+M2)/self.L0#length
+        M1 = -self.EI*self.k1
+        M2 =  self.EI*self.k2
+        V = (M1+M2)/self.L0
         self.Rloc = np.array([
             [-N],
             [ V],
@@ -174,8 +122,6 @@ class Beam:
             [-V],
             [M2],
         ])
-        #print('Rloc')
-        #print(self.Rloc)
     
     def update_Rel(self):
         sen = self.sen
@@ -188,36 +134,20 @@ class Beam:
             [   0,   0, 0,-sen, cos, 0],
             [   0,   0, 0,   0,   0, 1],
         ])
-        #print('T')
-        #print(T)
-        #print('T.T')
-        #print(T.T)
         self.Rel = np.matmul(T.T, self.Rloc)
-        #print('Rel')
-        #print(self.Rel)
     
-    def update_Kloc(self):
-        dx = self.node2.x - self.node1.x
-        dy = self.node2.y - self.node1.y
-        length = np.sqrt(dx*dx+dy*dy)
-        self.cos = dx/length
-        self.sen = dy/length
-        self.length = length
+    def update_KL(self):
         
         EA = self.EA
         EI = self.EI
         L0 = self.L0
-        I = self.I
-        A = self.A
-        L = self.length
         
         K11 = EA/L0
         K22 = 12*EI/L0**3
         K23 = 6*EI/L0**2
         K33 = 4*EI/L0
         KK33 = K33/2
-        
-        Kloc = np.array([
+        self.KL = np.array([
             [ K11,   0,   0,-K11,   0,   0],
             [   0, K22, K23,   0,-K22, K23],
             [   0, K23, K33,   0,-K23,KK33],
@@ -225,77 +155,58 @@ class Beam:
             [   0,-K22,-K23,   0, K22,-K23],
             [   0, K23,KK33,   0,-K23, K33],
         ])
+    
+    def update_KNL(self):
         
-        M1 = 2.*EI/L0*(2.*self.a1+self.a2)
-        M2 = 2.*EI/L0*(self.a1+2.*self.a2)
-        V = (M1+M2)/L0
-        
-        e = (self.length-L0)/L0
-        F1 = -EA*e
-        F2 = V
-        F3 = M1#(M1+M2)/2
-        ##print(self.node1.i,self.node2.i,F1,F2,F3)
-        anflex = True
-        if anflex:
-            IAL = I/A/L0
-            C1 = (1.2+12*IAL/L0)/L0
-            C2 = (0.1+6*IAL/L0)
-            C3 = (L0/7.5+4*IAL)
-            C4 = (L0/30.-2*IAL)
-            G11 = -F1/L0
-            G12 = -F2/L0
-            G13 = -F3/L0
-            G14 = -G11
-            G15 = -G12
-            G16 =  F3/L0-F2
-            G22 = -C1*F1
-            G23 = -C2*F1
-            G24 =  G15
-            G25 = -G22
-            G26 =  G23
-            G33 = -C3*F1
-            G34 = -G13
-            G35 = -G23
-            G36 =  C4*F1
-            G44 =  G11
-            G45 =  G12
-            G46 = -G16
-            G55 =  G22
-            G56 = -G23
-            G66 =  G33
-            Gloc = np.array([
-                [G11, G12, G13, G14, G15, G16],
-                [G12, G22, G23, G24, G25, G26],
-                [G13, G23, G33, G34, G35, G36],
-                [G14, G24, G34, G44, G45, G46],
-                [G15, G25, G35, G45, G55, G56],
-                [G16, G26, G36, G46, G56, G66],
-            ])
-        else:
-            ###C1 = F1/L0
-            ###C3 = F3/L0
-            ###IAL = I/A/L0
-            ###C4 = F1*(1.2+12*IAL/L0)/L0
-            ###C6 = F1*(0.1+6*IAL/L0)
-            ###C8 = F1*(L0/7.5+4*IAL)
-            ###C9 = F1*(L0/30.-2*IAL)
-            C1 = 0
-            C3 = 0
-            C4 = F1*1.2/L0
-            C6 = F1*0.1
-            C8 = F1*L0/7.5
-            C9 = F1*L0/30.
-            Gloc = np.array([
-                [  -C1,   0, -C3,    C1,   0, C3-F2],
-                [    0, -C4, -C6,     0,  C4,   -C6],
-                [  -C3, -C6, -C8,    C3,  C6,    C9],
-                [   C1,   0,  C3,   -C1,   0, F2-C3],
-                [    0,  C4,  C6,     0, -C4,    C6],
-                [C3-F2, -C6,  C9, F2-C3,  C6,   -C8],
-            ])
-        
-        self.Kloc = Kloc + Gloc
-        ##print(self.Kloc)
+        F1 = self.Rloc[0][0]
+        F2 = self.Rloc[1][0]
+        F3 = self.Rloc[2][0]
+
+        I = self.I
+        A = self.A
+        L0 = self.L0
+
+        IAL = I/A/L0
+        C1 = (1.2+12*IAL/L0)/L0
+        C2 = (0.1+6*IAL/L0)
+        C3 = (L0/7.5+4*IAL)
+        C4 = (L0/30.-2*IAL)
+
+        G11 = -F1/L0
+        G12 = -F2/L0
+        G13 = -F3/L0
+        G14 = -G11
+        G15 = -G12
+        G16 =  F3/L0-F2
+        G22 = -C1*F1
+        G23 = -C2*F1
+        G24 =  G15
+        G25 = -G22
+        G26 =  G23
+        G33 = -C3*F1
+        G34 = -G13
+        G35 = -G23
+        G36 =  C4*F1
+        G44 =  G11
+        G45 =  G12
+        G46 = -G16
+        G55 =  G22
+        G56 = -G23
+        G66 =  G33
+        self.KNL = np.array([
+            [G11, G12, G13, G14, G15, G16],
+            [G12, G22, G23, G24, G25, G26],
+            [G13, G23, G33, G34, G35, G36],
+            [G14, G24, G34, G44, G45, G46],
+            [G15, G25, G35, G45, G55, G56],
+            [G16, G26, G36, G46, G56, G66],
+        ])
+    
+    def update_Kloc(self, step):
+        self.step = step
+        self.update_KL()
+        self.update_KNL()
+        self.Kloc = self.KL + self.KNL
         
     def update_Kel(self):
         sen = self.sen
@@ -314,95 +225,67 @@ class HysBeam(Beam):
 
     f = 1
     
-    def __init__(self,material,node1,node2):
-        super().__init__(material,node1,node2)
+    def __init__(self,iel,material,node1,node2):
+        super().__init__(iel,material,node1,node2)
     
         #Dados do material
         EI = self.EI
-        EIt = EI/2.
+        EIt = EI/3.
         #self.EI = EI    # Modulo de elasticidade
         self.EIt = EIt  # Modulo de elasticidade tangente
         self.Mc = material.Mc  # Momento critico
         self.H = EI * EIt / (EI - EIt) # Modulo de encruamento
-        self.H1 = EI * EIt / (EI - EIt) # Modulo de encruamento
-        self.H2 = EI * EIt / (EI - EIt) # Modulo de encruamento
     
         #Variaveis de estado
-        self.k_in = 0  # Parcela inelastica das deformacoes
-        self.k1_in = 0  # Parcela inelastica das deformacoes
-        self.k2_in = 0  # Parcela inelastica das deformacoes
-        self.beta = 0  # Variavel de controle da plasticidade
-        self.beta1 = 0  # Variavel de controle da plasticidade
-        self.beta2 = 0  # Variavel de controle da plasticidade
-        self.EIc = EI  # Modulo de elasticidade atual
-        self.EIc1 = EI  # Modulo de elasticidade atual
-        self.EIc2 = EI  # Modulo de elasticidade atual
-        self.M = 0     # Momento atual
-        self.M1 = 0     # Momento atual
-        self.M2 = 0     # Momento atual
+        self.k_in0 = np.zeros(2)  # Parcela inelastica das deformacoes
+        self.beta0 = np.zeros(2)  # Variavel de controle da plasticidade
+        self.k_in = np.zeros(2)  # Parcela inelastica das deformacoes
+        self.beta = np.zeros(2)  # Variavel de controle da plasticidade
+        self.EIc = EI*np.ones(2)  # Modulo de elasticidade atual
+        self.M = np.zeros(2)     # Momento atual
 
-    # Atualiza o estado de tensao
-    def update_M1(self):
-        # Calcula como se fosse regime elastico
-        k1_e = self.k1 - self.k1_in
-        self.M1 = self.EI * k1_e
-        self.EIc1 = self.EI
-    
-        # Verifica e faz a correcao plastica
-        f = abs(self.M1 - self.beta1) - self.Mc
-        if (f > 0):
-            # Corrige a tensao e incrementa a parcela inelastica da deformacao
-            self.EIc1 = self.EIt
-            r = self.M1 / abs(self.M1)
-            l = f / (self.EI + self.H1)
-            self.M1 = self.M1 - self.EI * l * r
-            self.k1_in = self.k1_in + l * r
-            self.beta1 = self.beta1 + l * self.H1 * r
-    def update_M2(self):
-        # Calcula como se fosse regime elastico
-        k2_e = self.k2 - self.k2_in
-        self.M2 = self.EI * k2_e
-        self.EIc2 = self.EI
-    
-        # Verifica e faz a correcao plastica
-        f = abs(self.M2 - self.beta2) - self.Mc
-        if (f > 0):
-            # Corrige a tensao e incrementa a parcela inelastica da deformacao
-            self.EIc2 = self.EIt
-            r = self.M2 / abs(self.M2)
-            l = f / (self.EI + self.H2)
-            self.M2 = self.M2 - self.EI * l * r
-            self.k2_in = self.k2_in + l * r
-            self.beta2 = self.beta2 + l * self.H2 * r
+    def backup(self):
+        self.k_in0 = self.k_in
+        self.beta0 = self.beta
+
     def update_M(self):
         # Calcula como se fosse regime elastico
-        k_e = self.k - self.k_in
+        k_e = self.k - self.k_in0
         self.M = self.EI * k_e
-        self.EIc = self.EI
-    
+        #self.EIc = self.EI
+
         # Verifica e faz a correcao plastica
-        f = abs(self.M - self.beta) - self.Mc
-        if (f > 0):
-            # Corrige a tensao e incrementa a parcela inelastica da deformacao
-            self.EIc = self.EIt
-            r = self.M / abs(self.M)
-            l = f / (self.EI + self.H)
-            self.M = self.M - self.EI * l * r
-            self.k_in = self.k_in + l * r
-            self.beta = self.beta + l * self.H * r
+        f = abs(self.M - self.beta0) - self.Mc
+        self.EIc = np.where(f > 0, self.EIt, self.EI)
+        r = self.M / abs(self.M)
+        l = f / (self.EI + self.H)
+        lr = np.where(f > 0, l*r, 0.)
+        self.M = self.M - self.EI * lr
+        self.k_in = self.k_in0 + lr
+        self.beta = self.beta0 + lr * self.H
     
-    #def update_length(self):
-    #    super().update_length()
-    #    self.k = (self.a1-self.a2)/self.L0
-    #    self.update_M()
+    def update_length(self):
+        super().update_length()
+        self.update_k()
+    
+    def update_k(self):
+        #k = lambda x: 6.*x*(self.a1+self.a2)/self.L0**2 - 2.*(2.*self.a1+self.a2)/self.L0
+        #self.k = np.array([k(xi) for xi in [0.0, self.length]])
+        self.k = np.array([self.k1, self.k2])
+
     def update_Rloc(self):
+
         super().update_Rloc()
-        self.k1 = 2.*(2.*self.a1+self.a2)/self.L0
-        self.k2 = 2.*(self.a1+2.*self.a2)/self.L0
-        self.update_M1()
-        self.update_M2()
-        self.Rloc[2] = self.M1
-        self.Rloc[5] = self.M2
+        
+        self.update_M()
+        M1 = -self.M[0]
+        M2 =  self.M[1]
+        V = (M1+M2)/self.L0
+        self.Rloc[1] = V
+        self.Rloc[2] = M1
+        self.Rloc[4] = -V
+        self.Rloc[5] = M2
+
         ##self.k = (self.a2-self.a1)/self.L0
         ###self.k = (self.k1-self.k2)/2
         ##self.update_M()
@@ -413,8 +296,68 @@ class HysBeam(Beam):
         ##    self.Rloc[2] = 0.0
         ##    self.Rloc[5] = 0.0
     
-    def update_Kloc(self):
-        #EI_bak = self.EI
-        #self.EI = self.EIc
-        super().update_Kloc()
-        #self.EI = EI_bak
+    def update_KL(self):
+        
+        #super().update_KL()
+
+        EA = self.EA
+        if self.step in [9,10,26,27,28,29,30]:
+            f = 1/3
+        elif self.step == 8:
+            f = 0.58
+        elif self.step == 25:
+            f = 0.87
+        else:
+            f = 1.
+        EI = self.EI*f
+        L0 = self.L0
+        
+        K11 = EA/L0
+        K22 = 12*EI/L0**3
+        K23 = 6*EI/L0**2
+        K33 = 4*EI/L0
+        KK33 = K33/2
+        self.KL = np.array([
+            [ K11,   0,   0,-K11,   0,   0],
+            [   0, K22, K23,   0,-K22, K23],
+            [   0, K23, K33,   0,-K23,KK33],
+            [-K11,   0,   0, K11,   0,   0],
+            [   0,-K22,-K23,   0, K22,-K23],
+            [   0, K23,KK33,   0,-K23, K33],
+        ])
+
+        ###EA = self.EA
+        ###EI = self.EI
+        ###L0 = self.L0
+        ###
+        ###K11 = EA/L0
+        ###K22 = 12*EI/L0**3
+        ###K23 = 6*EI/L0**2
+        ###K33 = 4*EI/L0
+        ###KK33 = K33/2
+        ###M1 = self.Rloc[2][0]
+        ###M2 = self.Rloc[5][0]
+        ###if abs(self.a1) > 0. and abs(self.a2) > 0.:
+        ###    x1 = self.L0*(2*M1-M2)/(6*self.a1*EI)
+        ###    x2 = self.L0*(2*M2-M1)/(6*self.a2*EI)
+        ###else:
+        ###    x1 = 1.0
+        ###    x2 = 1.0
+        ###self.KL = np.array([
+        ###    [ K11,   0,   0*x1,-K11,   0,   0*x2],
+        ###    [   0, K22, K23*x1,   0,-K22, K23*x2],
+        ###    [   0, K23, K33*x1,   0,-K23,KK33*x2],
+        ###    [-K11,   0,   0*x1, K11,   0,   0*x2],
+        ###    [   0,-K22,-K23*x1,   0, K22,-K23*x2],
+        ###    [   0, K23,KK33*x1,   0,-K23, K33*x2],
+        ###])
+        ###disps = np.array([
+        ###    [0],
+        ###    [0],
+        ###    [self.a1],
+        ###    [self.length-self.L0],
+        ###    [0],
+        ###    [self.a2],
+        ###])
+        ###Rloc_test = np.matmul(self.KL,disps)
+        ###a = 1

@@ -53,16 +53,6 @@ for idof in range(dimK):
         nodeMap[idof] = imap
         imap = imap + 1
 
-# Matriz de rigidez global
-K = np.zeros((dimK,dimK))
-for i,el in enumerate(els):
-    el.update_Kloc()
-    el.update_Kel()
-    add_Kel_to_K(el)
-for DOF in elimDOFs:
-    K = np.delete(K, DOF, 0)
-    K = np.delete(K, DOF, 1)
-
 # Matriz de massa global
 M = np.zeros((dimK,dimK))
 for i,el in enumerate(els):
@@ -88,16 +78,6 @@ nsteps = int(tot_t / Dt)
 U = np.zeros((nsteps+1,len(F),1))
 V = np.zeros((nsteps+1,len(F),1))
 A = np.zeros((nsteps+1,len(F),1))
-
-# calcula R inicial
-R = np.zeros((dimK,1))
-for i,el in enumerate(els):
-    el.update_length()
-    el.update_Rloc()
-    el.update_Rel()
-    add_Rel_to_R(el)
-for DOF in elimDOFs:
-    R = np.delete(R, DOF, 0)
 
 # Forca periodica
 w = 2.0*np.pi/T
@@ -156,11 +136,34 @@ while step < nsteps:
         
         niter = 0
         Rnorm = np.inf
+
+        for i,el in enumerate(els):
+            el.backup()
         
-        while Rnorm > 0.001 and niter < maxiter:
+        while Rnorm > 1e-4 and niter < maxiter:
         
             niter = niter + 1
             #print('============================= iter ',niter)
+
+            # atualiza R
+            R = np.zeros((dimK,1))
+            for i,el in enumerate(els):
+                el.update_length()
+                el.update_Rloc()
+                el.update_Rel()
+                add_Rel_to_R(el)
+            for DOF in elimDOFs:
+                R = np.delete(R, DOF, 0)
+            
+            # atualiza K
+            K = np.zeros((dimK,dimK))
+            for i,el in enumerate(els):
+                el.update_Kloc(step)
+                el.update_Kel()
+                add_Kel_to_K(el)
+            for DOF in elimDOFs:
+                K = np.delete(K, DOF, 0)
+                K = np.delete(K, DOF, 1)
             
             auxM1 = ic[0] * (U[ia] - U[step]) + ic[2] * V[ia] + ic[3] * A[ia]
             auxM2 = np.matmul(M,auxM1)
@@ -178,30 +181,9 @@ while step < nsteps:
             ##print('dR')
             ##print(dR)
             
-            # atualiza K
-            K = np.zeros((dimK,dimK))
-            for i,el in enumerate(els):
-                el.update_Kloc()
-                el.update_Kel()
-                add_Kel_to_K(el)
-            for DOF in elimDOFs:
-                K = np.delete(K, DOF, 0)
-                K = np.delete(K, DOF, 1)
-            
             KE = K + ic[0] * M
             #print('KE')
             #print(KE)
-            
-            # posicoes anflex
-            # 11 - 78
-            # 12 - 79
-            # 13 - 83
-            # 21 - 90
-            # 22 - 91
-            # 23 - 95
-            # 31 - 138
-            # 32 - 139
-            # 33 - 143
             
             # incrementa deslocamentos
             KEinv = np.linalg.inv(KE)
@@ -232,39 +214,13 @@ while step < nsteps:
                 #print('a = ',node.a)
                 #print('ainc = ',node.ainc)
             
-            # atualiza R
-            R = np.zeros((dimK,1))
-            for i,el in enumerate(els):
-                el.update_length()
-                el.update_Rloc()
-                el.update_Rel()
-                add_Rel_to_R(el)
-            for DOF in elimDOFs:
-                R = np.delete(R, DOF, 0)
-            
             # reavalia residuo
-            dR = FE - R
-            #print('# pos')
-            #print('FE')
-            #print(FE)
-            #print('R')
-            #print(R)
-            #print('dR')
-            #print(dR)
-            Rnorm = np.linalg.norm(dR)
-            #print(Rnorm)
-            #print(Rnorm**2)
+            Rnorm = np.linalg.norm(dU)
         
         if niter == maxiter:
-            #print()
-            #print('step')
-            #print(step)
-            #print('niter')
-            #print(niter)
             print()
-            print(iters.values)
-            print(iters.sum())
-            exit()
+            print("CONV ERROR STEP {}".format(step))
+            step = nsteps
     
     # Atualiza aceleracoes e velocidades
     A[step] = ic[0] * (U[step] - U[ia]) - ic[2] * V[ia] - ic[3] * A[ia]
@@ -274,7 +230,7 @@ while step < nsteps:
     new_SS = []
     for i,el in enumerate(els):
         new_e = el.k1
-        new_S = el.M1
+        new_S = -el.Rloc[2][0]
         new_ee.append(new_e)
         new_SS.append(new_S)
     ee = np.hstack([ee, np.transpose([new_ee])])

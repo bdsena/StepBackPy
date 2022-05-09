@@ -10,8 +10,8 @@ m = 0
 ##E2 = 3.08e10
 ##Sy = 2.0e9
 ##Sy = 1.98e9
-#mat1 = MaterialLin(E1,A,m,I)
-mat1 = MaterialPlast(E1,A,m,I,2.)
+mat1 = MaterialLin(E1,A,m,I)
+mat2 = MaterialPlast(E1,A,m,I,2.)
 L = 2.54
 npts = 11
 nodes = []
@@ -19,8 +19,8 @@ for i in range(npts):
     nodes.append(Node(i, L*i/(npts-1), 0, 0))
 els = []
 for i in range(npts-1):
-    #els.append(Beam(mat1,nodes[i],nodes[i+1]))
-    els.append(HysBeam(mat1,nodes[i],nodes[i+1]))
+    #els.append(Beam(i,mat1,nodes[i],nodes[i+1]))
+    els.append(HysBeam(i,mat2,nodes[i],nodes[i+1]))
 elimDOFs = [
     0, # no' 0 x
     1, # no' 0 y
