@@ -121,24 +121,36 @@ class Iters:
         return [sum(i) for i in self.values]
     def stbk(self):
         return [len(i)-1 for i in self.values]
+    
+R = np.zeros((dimK,1))
+for el in els:
+    el.set_STBK(STBK)
 
 step = 0
-maxiter = 300
+maxiter = 200
+maxloop = 5
 iters = Iters()
 while step < nsteps:
 
     step = step + 1
     ia = step - 1
     
-    if True:
+    for el in els:
+        el.backup()
+    
+    step_iters = []
+    
+    iloop = 0
+    NRP_Loop = True
+    while NRP_Loop and iloop < maxloop:
     
         U[step] = U[ia]
         
         niter = 0
         Rnorm = np.inf
 
-        for i,el in enumerate(els):
-            el.backup()
+        iloop = iloop + 1
+        Rbak = np.copy(R)
         
         while Rnorm > 1e-4 and niter < maxiter:
         
@@ -217,10 +229,36 @@ while step < nsteps:
             # reavalia residuo
             Rnorm = np.linalg.norm(dU)
         
-        if niter == maxiter:
-            print()
-            print("CONV ERROR STEP {}".format(step))
-            step = nsteps
+        step_iters.append(niter)
+        
+        NRP_Loop = False
+        for el in els:
+            NRP_Loop_el = el.NRP_check()
+            NRP_Loop = NRP_Loop or NRP_Loop_el
+        
+        if NRP_Loop:
+            
+            R = np.copy(Rbak)
+            
+            # restaura nos a partir de U
+            for node in nodes:
+                DOFx = nodeMap[3*node.i]
+                DOFy = nodeMap[3*node.i+1]
+                DOFa = nodeMap[3*node.i+2]
+                if DOFx != None:
+                    node.x = node.x0 + U[ia][DOFx][0]
+                if DOFy != None:
+                    node.y = node.y0 + U[ia][DOFy][0]
+                if DOFa != None:
+                    node.a = node.a0 + U[ia][DOFa][0]
+            
+            for el in els:
+                el.restore()
+        
+    if iloop == maxloop:
+        print()
+        print("CONV ERROR STEP {}".format(step))
+        step = nsteps
     
     # Atualiza aceleracoes e velocidades
     A[step] = ic[0] * (U[step] - U[ia]) - ic[2] * V[ia] - ic[3] * A[ia]
@@ -236,7 +274,7 @@ while step < nsteps:
     ee = np.hstack([ee, np.transpose([new_ee])])
     SS = np.hstack([SS, np.transpose([new_SS])])
     
-    iters.add([niter])
+    iters.add(step_iters)
     progress_bar(step,nsteps)
 
 print()
@@ -267,4 +305,4 @@ for i,node in enumerate(nodes):
         anodes[:,i] = anodes[:,i]*node.a0
 
 dofs = np.array([nodeMap[k] for k in nodeMap], dtype=float)
-np.savez('outPP.npz',t=t,desl=desl,FF=FF,ee=ee,SS=SS,xnodes=xnodes,ynodes=ynodes,anodes=anodes,dofs=dofs,ndof=2)
+np.savez('outPP.npz',t=t,desl=desl,FF=FF,ee=ee,SS=SS,xnodes=xnodes,ynodes=ynodes,anodes=anodes,dofs=dofs,ndof=3)

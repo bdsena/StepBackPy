@@ -11,7 +11,7 @@ m = 0
 ##Sy = 2.0e9
 ##Sy = 1.98e9
 mat1 = MaterialLin(E1,A,m,I)
-mat2 = MaterialPlast(E1,A,m,I,2.)
+mat2 = MaterialPlast(E1,A,m,I,2.,E1*I/3.)
 L = 2.54
 npts = 11
 nodes = []
@@ -36,7 +36,9 @@ print("Mc = ", Mc)
 F[-1] = Mc
 ###Fc = els[0].EI/L**2
 ###print("Fc = ", Fc)
-###F[-2] = Fc*10
+###F[-2] = Fc*2
+
+STBK = True
 
 Dt = 1.
 #tot_t = 3.55

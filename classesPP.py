@@ -19,12 +19,13 @@ class MaterialLin:
         self.I = I
 
 class MaterialPlast:
-    def __init__(self,E,A,m,I,Mc):
+    def __init__(self,E,A,m,I,Mc,EIt):
         self.E = E
         self.A = A
         self.m = m
         self.I = I
         self.Mc = Mc
+        self.EIt = EIt
 
 class Beam:
 
@@ -51,7 +52,6 @@ class Beam:
         
         self.EA = E*A
         self.EI = E*I
-        self.EIc = E*I
         self.I = I
         
         lumped_mass = True
@@ -90,8 +90,17 @@ class Beam:
         self.a1 = self.node1.a0 - self.theta0
         self.a2 = self.node2.a0 - self.theta0
     
+    def set_STBK(self, STBK):
+        pass
+    
     def backup(self):
         pass
+    
+    def restore(self):
+        pass
+    
+    def NRP_check(self):
+        return False
 
     def update_length(self):
         dx = self.node2.x - self.node1.x
@@ -222,55 +231,94 @@ class Beam:
         self.Kel = np.matmul(T.T, np.matmul(self.Kloc, T))
 
 class HysBeam(Beam):
-
-    f = 1
     
+    f = np.ones(2)
+    M = np.zeros(2)
+    k = np.zeros(2)
+    k_in = np.zeros(2)
+    beta = np.zeros(2)
+    M_bak = np.zeros(2)
+    k_bak = np.zeros(2)
+    k_in_bak = np.zeros(2)
+    beta_bak = np.zeros(2)
+
     def __init__(self,iel,material,node1,node2):
         super().__init__(iel,material,node1,node2)
+        self.Mc = material.Mc
+        self.EIt = material.EIt
+        self.H = self.EI * self.EIt / (self.EI - self.EIt)
     
-        #Dados do material
-        EI = self.EI
-        EIt = EI/3.
-        #self.EI = EI    # Modulo de elasticidade
-        self.EIt = EIt  # Modulo de elasticidade tangente
-        self.Mc = material.Mc  # Momento critico
-        self.H = EI * EIt / (EI - EIt) # Modulo de encruamento
-    
-        #Variaveis de estado
-        self.k_in0 = np.zeros(2)  # Parcela inelastica das deformacoes
-        self.beta0 = np.zeros(2)  # Variavel de controle da plasticidade
-        self.k_in = np.zeros(2)  # Parcela inelastica das deformacoes
-        self.beta = np.zeros(2)  # Variavel de controle da plasticidade
-        self.EIc = EI*np.ones(2)  # Modulo de elasticidade atual
-        self.M = np.zeros(2)     # Momento atual
+    def set_STBK(self, STBK):
+        self.STBK = STBK
 
     def backup(self):
-        self.k_in0 = self.k_in
-        self.beta0 = self.beta
+        self.k_in_bak = self.k_in
+        self.beta_bak = self.beta
+        self.M_bak = self.M
+        self.k_bak = self.k
 
-    def update_M(self):
+    def restore(self):
+        self.k_in = self.k_in_bak
+        self.beta = self.beta_bak
+        self.M = self.M_bak
+        self.k = self.k_bak
+    
+    def NRP_check(self):
+        
+        NRP_Loop = False
+        
+        if self.STBK:
+            self.update_k()
+            dM = self.M - self.M_bak
+            dk = self.k - self.k_bak
+            EIsec = abs(dM/dk)
+            EIsec = np.where(np.isnan(EIsec),0,EIsec)
+            f_new = EIsec/self.EI
+            err = (f_new - self.f) / self.f
+            if np.linalg.norm(err) > 1e-2:
+                self.f = f_new
+                NRP_Loop = True
+        
+        return NRP_Loop
+    
+    def update_k(self):
         # Calcula como se fosse regime elastico
-        k_e = self.k - self.k_in0
-        self.M = self.EI * k_e
-        #self.EIc = self.EI
-
+        M = self.M
+        k_e = M / self.EI
+        self.k = k_e + self.k_in_bak
         # Verifica e faz a correcao plastica
-        f = abs(self.M - self.beta0) - self.Mc
-        self.EIc = np.where(f > 0, self.EIt, self.EI)
-        r = self.M / abs(self.M)
-        l = f / (self.EI + self.H)
+        f = abs(M - self.beta_bak) - self.Mc
+        r = M / abs(M)
+        r2 = (M - self.beta_bak) / abs(M - self.beta_bak)
+        C0 = (1+self.H/self.EI)
+        M = (C0*r*M - self.Mc - r2*self.beta_bak) / (C0*r - r2)
+        f2 = abs(M - self.beta_bak) - self.Mc
+        l = f2 / (self.EI + self.H)
         lr = np.where(f > 0, l*r, 0.)
-        self.M = self.M - self.EI * lr
-        self.k_in = self.k_in0 + lr
-        self.beta = self.beta0 + lr * self.H
+        self.k = self.k + lr
+        self.k_in = self.k_in_bak + lr
+        self.beta = self.beta_bak + lr * self.H
+                
+    def update_M(self):
+        if self.STBK:
+            dk = self.k - self.k_bak
+            EIc = self.f * self.EI
+            self.M = self.M_bak + EIc*dk
+        else:
+            # Calcula como se fosse regime elastico
+            k_e = self.k - self.k_in_bak
+            self.M = self.EI * k_e
+            # Verifica e faz a correcao plastica
+            f = abs(self.M - self.beta_bak) - self.Mc
+            r = self.M / abs(self.M)
+            l = f / (self.EI + self.H)
+            lr = np.where(f > 0, l*r, 0.)
+            self.M = self.M - self.EI * lr
+            self.k_in = self.k_in_bak + lr
+            self.beta = self.beta_bak + lr * self.H
     
     def update_length(self):
         super().update_length()
-        self.update_k()
-    
-    def update_k(self):
-        #k = lambda x: 6.*x*(self.a1+self.a2)/self.L0**2 - 2.*(2.*self.a1+self.a2)/self.L0
-        #self.k = np.array([k(xi) for xi in [0.0, self.length]])
         self.k = np.array([self.k1, self.k2])
 
     def update_Rloc(self):
@@ -301,16 +349,10 @@ class HysBeam(Beam):
         #super().update_KL()
 
         EA = self.EA
-        if self.step in [9,10,26,27,28,29,30]:
-            f = 1/3
-        elif self.step == 8:
-            f = 0.58
-        elif self.step == 25:
-            f = 0.87
-        else:
-            f = 1.
-        EI = self.EI*f
+        EI = self.EI
         L0 = self.L0
+        f1 = self.f[0]
+        f2 = self.f[1]
         
         K11 = EA/L0
         K22 = 12*EI/L0**3
@@ -318,12 +360,12 @@ class HysBeam(Beam):
         K33 = 4*EI/L0
         KK33 = K33/2
         self.KL = np.array([
-            [ K11,   0,   0,-K11,   0,   0],
-            [   0, K22, K23,   0,-K22, K23],
-            [   0, K23, K33,   0,-K23,KK33],
-            [-K11,   0,   0, K11,   0,   0],
-            [   0,-K22,-K23,   0, K22,-K23],
-            [   0, K23,KK33,   0,-K23, K33],
+            [ K11,   0*f1,   0*f1,-K11,   0*f2,   0*f2],
+            [   0, K22*f1, K23*f1,   0,-K22*f2, K23*f2],
+            [   0, K23*f1, K33*f1,   0,-K23*f2,KK33*f2],
+            [-K11,   0*f1,   0*f1, K11,   0*f2,   0*f2],
+            [   0,-K22*f1,-K23*f1,   0, K22*f2,-K23*f2],
+            [   0, K23*f1,KK33*f1,   0,-K23*f2, K33*f2],
         ])
 
         ###EA = self.EA
