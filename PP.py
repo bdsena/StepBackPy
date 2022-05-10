@@ -43,6 +43,7 @@ def add_Rel_to_R(element):
 nnodes = len(nodes)
 dimK = nnodes*3 # caso bidimensional
 
+elimDOFs = [k for k in Upresc]
 elimDOFs.sort(reverse=True)
 nodeMap = {}
 imap = 0
@@ -52,6 +53,12 @@ for idof in range(dimK):
     else:
         nodeMap[idof] = imap
         imap = imap + 1
+
+F = []
+for i in range(3*npts-len(elimDOFs)):
+    F.append(0)
+for idof in Fpresc:
+    F[nodeMap[idof]] = Fpresc[idof]
 
 # Matriz de massa global
 M = np.zeros((dimK,dimK))
@@ -90,7 +97,7 @@ ramp_func = np.hstack([
     np.linspace(-1.05, 0.05,int(nsteps/4)+1)[1:],
 ])
 FF = np.vstack([Fi*ramp_func for Fi in F])
-print(FF[-1])
+#print(FF[-1])
 
 ee = np.zeros((len(els),1))
 SS = np.zeros((len(els),1))
@@ -134,6 +141,18 @@ while step < nsteps:
 
     step = step + 1
     ia = step - 1
+
+    # atualiza deslocamentos prescritos
+    for idof in Upresc:
+        inode = int(idof/3)
+        node = nodes[inode]
+        idof2 = idof - 3*inode
+        if idof2 == 0:
+            node.x = node.x0 + ramp_func[step]*Upresc[idof]
+        if idof2 == 1:
+            node.y = node.y0 + ramp_func[step]*Upresc[idof]
+        if idof2 == 2:
+            node.a = node.a0 + ramp_func[step]*Upresc[idof]
     
     for el in els:
         el.backup()
@@ -303,6 +322,16 @@ for i,node in enumerate(nodes):
         anodes[:,i] = anodes[:,i]*node.a0 + U[:,idofa,0]
     else:
         anodes[:,i] = anodes[:,i]*node.a0
+for idof in Upresc:
+    inode = int(idof/3)
+    node = nodes[inode]
+    idof2 = idof - 3*inode
+    if idof2 == 0:
+        xnodes[:,i] = xnodes[:,i] + ramp_func*Upresc[idof]
+    if idof2 == 1:
+        ynodes[:,i] = ynodes[:,i] + ramp_func*Upresc[idof]
+    if idof2 == 2:
+        anodes[:,i] = anodes[:,i] + ramp_func*Upresc[idof]
 
 dofs = np.array([nodeMap[k] for k in nodeMap], dtype=float)
 np.savez('outPP.npz',t=t,desl=desl,FF=FF,ee=ee,SS=SS,xnodes=xnodes,ynodes=ynodes,anodes=anodes,dofs=dofs,ndof=3)

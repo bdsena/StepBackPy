@@ -10,12 +10,12 @@ except:
 
 data = np.load(fname)
 t = data['t']
-desl = data['desl']
-FF = data['FF'][-1]
+FF = data['FF'][-2]
 SS = data['SS']
 ee = data['ee']
 xnodes = data['xnodes']
 ynodes = data['ynodes']
+anodes = data['anodes']
 dofs = data['dofs']
 ndof = data['ndof']
 
@@ -28,7 +28,7 @@ dt = t[1]-t[0]
 # Create the figure and the line that we wiee manipulate
 fig, ax = plt.subplots(2,2)
 line1, = ax[0,0].plot(t, FF, lw=2)
-line2, = ax[0,1].plot(t, desl[0])
+line2, = ax[0,1].plot(t, xnodes[:,0])
 line3, = ax[1,0].plot(xnodes[-1], ynodes[-1], '-o')
 elemsel, = ax[1,0].plot(xnodes[-1][:2], ynodes[-1][:2], '-o', color='orange')
 nodesel, = ax[1,0].plot([xnodes[-1][0]], [ynodes[-1][0]], 'r-o')
@@ -67,14 +67,15 @@ def update(val):
     iel = int(elslider.val)
     inode = int(nodeslider.val)
     idof = int(dofslider.val)
-    idesl = dofs[inode*ndof+idof]
     line1.set_data(t[:npt+1], FF[:npt+1])
-    if np.isnan(idesl):
-        line2.set_data([], [])
-    else:
-        ydata = desl[int(idesl)]
-        line2.set_data(t[:npt], ydata[:npt])
-        resize_y(ax[0,1], ydata)
+    if idof == 0:
+        ydata = xnodes[:,inode]
+    if idof == 1:
+        ydata = ynodes[:,inode]
+    if idof == 2:
+        ydata = anodes[:,inode]
+    line2.set_data(t[:npt], ydata[:npt])
+    resize_y(ax[0,1], ydata)
     line3.set_data(xnodes[npt], ynodes[npt])
     resize_x(ax[1,0], xnodes[npt])
     resize_y(ax[1,0], ynodes[npt])

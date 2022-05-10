@@ -21,24 +21,28 @@ els = []
 for i in range(npts-1):
     #els.append(Beam(i,mat1,nodes[i],nodes[i+1]))
     els.append(HysBeam(i,mat2,nodes[i],nodes[i+1]))
-elimDOFs = [
-    0, # no' 0 x
-    1, # no' 0 y
-    2, # no' 0 a
-]
+
+Upresc = {
+    0: 0.0, # no' 0 x
+    1: 0.0, # no' 0 y
+    2: 0.0, # no' 0 a
+    #30: 0.0, # no' 11 x
+    31: 1.0, # no' 11 y
+}
+Mc = 0.5*np.pi*els[0].EI/L
+Fc = els[0].EI/L**2
+Fpresc = {
+    #31: Fc*2, # no' 11 y
+    #32: Mc, # no' 11 a
+}
+print('Upresc')
+print(Upresc)
+print('Fpresc')
+print(Fpresc)
 
 T = 20.0
-F = []
-for i in range(3*(npts-1)):
-    F.append(0)
-Mc = 0.5*np.pi*els[0].EI/L
-print("Mc = ", Mc)
-F[-1] = Mc
-###Fc = els[0].EI/L**2
-###print("Fc = ", Fc)
-###F[-2] = Fc*2
 
-STBK = True
+STBK = False
 
 Dt = 1.
 #tot_t = 3.55
